@@ -67,12 +67,18 @@ func (b *Bot) RegisterCommandsGlobal() error {
 	if b.registrar == nil {
 		return nil
 	}
+	if b.session == nil || b.session.State == nil || b.session.State.User == nil {
+		return fmt.Errorf("discord session not ready: open the session before registering commands")
+	}
 	return b.registrar.RegisterCommands(b.session.State.User.ID, "", []*discordgo.ApplicationCommand{remindCommand()})
 }
 
 func (b *Bot) RegisterCommandsForGuild(guildID string) error {
 	if b.registrar == nil {
 		return nil
+	}
+	if b.session == nil || b.session.State == nil || b.session.State.User == nil {
+		return fmt.Errorf("discord session not ready: open the session before registering commands")
 	}
 	return b.registrar.RegisterCommands(b.session.State.User.ID, guildID, []*discordgo.ApplicationCommand{remindCommand()})
 }
@@ -82,20 +88,20 @@ func (b *Bot) SetDryRun(d bool) { b.dryRun = d }
 func remindCommand() *discordgo.ApplicationCommand {
 	return &discordgo.ApplicationCommand{
 		Name:        "remind",
-		Description: "Create and manage reminders",
+		Description: "Create and manage reminders (times are in UTC)",
 		Options: []*discordgo.ApplicationCommandOption{
 			{
 				Type:        discordgo.ApplicationCommandOptionSubCommand,
 				Name:        "add",
 				Description: "Add a reminder",
 				Options: []*discordgo.ApplicationCommandOption{
-					{Type: discordgo.ApplicationCommandOptionString, Name: "message", Description: "Message to send", Required: true},
-					{Type: discordgo.ApplicationCommandOptionString, Name: "schedule", Description: "once | hourly | daily", Required: true, Choices: []*discordgo.ApplicationCommandOptionChoice{
+					{Type: discordgo.ApplicationCommandOptionString, Name: "message", Description: "What should I send?", Required: true},
+					{Type: discordgo.ApplicationCommandOptionString, Name: "schedule", Description: "When: once, hourly, or daily", Required: true, Choices: []*discordgo.ApplicationCommandOptionChoice{
 						{Name: "once", Value: "once"},
 						{Name: "hourly", Value: "hourly"},
 						{Name: "daily", Value: "daily"},
 					}},
-					{Type: discordgo.ApplicationCommandOptionString, Name: "at", Description: "RFC3339 for once, HH:MM for daily", Required: false},
+					{Type: discordgo.ApplicationCommandOptionString, Name: "at", Description: "When (UTC). Once: 'YYYY-MM-DD HH:MM' or ISO like '2025-01-31T15:04:05Z'. Daily: 'HH:MM'. Optional.", Required: false},
 				},
 			},
 			{
@@ -171,34 +177,51 @@ func (b *Bot) handleAdd(i *discordgo.InteractionCreate) {
 	switch schedule {
 	case reminders.ScheduleOnce:
 		if at == "" {
-			b.respond(i, "For once schedule, provide 'at' in RFC3339, e.g. 2025-01-31T15:04:05Z", true)
-			return
+			// default: 5 minutes from now
+			nextRun = now.Add(5 * time.Minute)
+			atNS = sql.NullString{String: nextRun.Format(time.RFC3339), Valid: true}
+		} else {
+			// try parsing flexible formats: 'YYYY-MM-DD HH:MM' or RFC3339
+			parsed, perr := parseFlexibleTimeUTC(at)
+			if perr != nil || !parsed.After(now) {
+				b.respond(i, "Invalid time. Use 'YYYY-MM-DD HH:MM' or ISO like '2025-01-31T15:04:05Z' (UTC).", true)
+				return
+			}
+			nextRun = parsed
+			atNS = sql.NullString{String: nextRun.Format(time.RFC3339), Valid: true}
 		}
-		t, err := time.Parse(time.RFC3339, at)
-		if err != nil || !t.After(now) {
-			b.respond(i, "Invalid RFC3339 time or time is in the past.", true)
-			return
-		}
-		nextRun = t.UTC()
-		atNS = sql.NullString{String: nextRun.Format(time.RFC3339), Valid: true}
 	case reminders.ScheduleHourly:
-		nextRun = now.Add(time.Hour)
-	case reminders.ScheduleDaily:
+		// default: next minute
 		if at == "" {
-			b.respond(i, "For daily schedule, provide 'at' in HH:MM (24h) server time.", true)
+			nextRun = now.Truncate(time.Minute).Add(time.Minute)
+		} else {
+			// allow minutes offset like ":15" or "HH:MM"
+			parsed, perr := parseHourMinuteUTC(now, at)
+			if perr != nil || !parsed.After(now) {
+				// fallback to +1h
+				nextRun = now.Add(time.Hour)
+			} else {
+				nextRun = parsed
+			}
+		}
+	case reminders.ScheduleDaily:
+		// default: next minute (HH:MM of now+1min)
+		hhmm := at
+		if hhmm == "" {
+			nm := now.Truncate(time.Minute).Add(time.Minute)
+			hhmm = fmt.Sprintf("%02d:%02d", nm.Hour(), nm.Minute())
+		}
+		if len(hhmm) != 5 || hhmm[2] != ':' {
+			b.respond(i, "Use HH:MM (UTC), e.g., 09:00.", true)
 			return
 		}
-		if len(at) != 5 || at[2] != ':' {
-			b.respond(i, "Invalid HH:MM format.", true)
-			return
-		}
-		hour := (int(at[0]-'0')*10 + int(at[1]-'0'))
-		min := (int(at[3]-'0')*10 + int(at[4]-'0'))
+		hour := (int(hhmm[0]-'0')*10 + int(hhmm[1]-'0'))
+		min := (int(hhmm[3]-'0')*10 + int(hhmm[4]-'0'))
 		nextRun = time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, time.UTC)
 		if !nextRun.After(now) {
 			nextRun = nextRun.Add(24 * time.Hour)
 		}
-		atNS = sql.NullString{String: at, Valid: true}
+		atNS = sql.NullString{String: hhmm, Valid: true}
 	}
 
 	guildID := ""

@@ -50,7 +50,12 @@ func main() {
 	// Enable dry-run if requested (no actual sends)
 	discordBot.SetDryRun(cfg.DryRun)
 
-	// Register commands depending on env
+	if err := discordBot.Open(); err != nil {
+		log.Fatalf("discord open error: %v", err)
+	}
+	defer discordBot.Close()
+
+	// Register commands after session is opened (application ID is available)
 	if cfg.Env == "test" && cfg.TestGuildID != "" {
 		if err := discordBot.RegisterCommandsForGuild(cfg.TestGuildID); err != nil {
 			log.Printf("guild command register error: %v", err)
@@ -60,11 +65,6 @@ func main() {
 			log.Printf("global command register error: %v", err)
 		}
 	}
-
-	if err := discordBot.Open(); err != nil {
-		log.Fatalf("discord open error: %v", err)
-	}
-	defer discordBot.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
