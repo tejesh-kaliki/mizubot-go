@@ -1,0 +1,11 @@
+# Example config for MizuBot
+discord_token: "Bot <your_token_here>"
+database_path: "./reminders.db"
+tick_interval: "10s"
+
+# Optional
+env: "test"            # or "prod"
+test_guild_id: "123456789012345678"
+dry_run: true          # log sends instead of posting
+
+
