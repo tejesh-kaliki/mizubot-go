@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"mizubot-go/internal/animefeed"
 	"mizubot-go/internal/bot"
 	"mizubot-go/internal/config"
 	"mizubot-go/internal/db"
@@ -43,7 +44,27 @@ func main() {
 
 	store := reminders.NewStore(database)
 
-	discordBot, err := bot.New(cfg.DiscordToken, store)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var publisher animefeed.Publisher
+	if cfg.S3AccessKey != "" && cfg.S3SecretKey != "" && cfg.S3Bucket != "" && cfg.S3Region != "" {
+		s3Publisher, err := animefeed.NewS3Publisher(ctx, animefeed.S3PublisherConfig{
+			AccessKey: cfg.S3AccessKey,
+			SecretKey: cfg.S3SecretKey,
+			Bucket:    cfg.S3Bucket,
+			Region:    cfg.S3Region,
+			Prefix:    cfg.S3Prefix,
+		})
+		if err != nil {
+			log.Fatalf("s3 publisher init error: %v", err)
+		}
+		publisher = s3Publisher
+	}
+
+	animeService := animefeed.NewService(database, publisher, cfg.AnimeFeedURL)
+
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}
@@ -66,13 +87,13 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	sched := scheduler.New(store, discordBot.SendChannelMessage, cfg.TickInterval)
 	sched.Start(ctx)
 
-	log.Printf("MizuBot is running. Tick: %s", cfg.TickInterval.String())
+	animePoller := animefeed.NewPoller(animeService, discordBot, cfg.AnimePollInterval)
+	animePoller.Start(ctx)
+
+	log.Printf("MizuBot is running. Reminder tick: %s. Anime poll: %s", cfg.TickInterval.String(), cfg.AnimePollInterval.String())
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

@@ -11,21 +11,43 @@ import (
 )
 
 type Config struct {
-	DiscordToken string
-	DatabasePath string
-	TickInterval time.Duration
-	Env          string // "prod" or "test"
-	TestGuildID  string
-	DryRun       bool
+	DiscordToken      string
+	DatabasePath      string
+	TickInterval      time.Duration
+	AnimePollInterval time.Duration
+	AnimeFeedURL      string
+	S3AccessKey       string
+	S3SecretKey       string
+	S3Bucket          string
+	S3Region          string
+	S3Prefix          string
+	Env               string // "prod" or "test"
+	TestGuildID       string
+	DryRun            bool
 }
 
 type fileConfig struct {
-	DiscordToken string `yaml:"discord_token"`
-	DatabasePath string `yaml:"database_path"`
-	TickInterval string `yaml:"tick_interval"`
-	Env          string `yaml:"env"`
-	TestGuildID  string `yaml:"test_guild_id"`
-	DryRun       bool   `yaml:"dry_run"`
+	DiscordToken string          `yaml:"discord_token"`
+	DatabasePath string          `yaml:"database_path"`
+	TickInterval string          `yaml:"tick_interval"`
+	Anime        animeFileConfig `yaml:"anime"`
+	AWS          awsFileConfig   `yaml:"aws"`
+	Env          string          `yaml:"env"`
+	TestGuildID  string          `yaml:"test_guild_id"`
+	DryRun       bool            `yaml:"dry_run"`
+}
+
+type animeFileConfig struct {
+	PollInterval string `yaml:"poll_interval"`
+	FeedURL      string `yaml:"feed_url"`
+	Bucket       string `yaml:"bucket"`
+	Prefix       string `yaml:"prefix"`
+}
+
+type awsFileConfig struct {
+	S3AccessKey string `yaml:"s3_access_key"`
+	S3SecretKey string `yaml:"s3_secret_key"`
+	S3Region    string `yaml:"s3_region"`
 }
 
 // Load keeps env-only behavior for backward compatibility
@@ -54,24 +76,38 @@ func LoadFromFile(path string) (Config, error) {
 }
 
 type envVals struct {
-	Env         string
-	Token       string
-	TokenTest   string
-	DBPath      string
-	Tick        string
-	DryRun      string
-	TestGuildID string
+	Env          string
+	Token        string
+	TokenTest    string
+	DBPath       string
+	Tick         string
+	AnimePoll    string
+	AnimeFeedURL string
+	S3AccessKey  string
+	S3SecretKey  string
+	S3Bucket     string
+	S3Region     string
+	S3Prefix     string
+	DryRun       string
+	TestGuildID  string
 }
 
 func osEnv() envVals {
 	return envVals{
-		Env:         os.Getenv("BOT_ENV"),
-		Token:       os.Getenv("DISCORD_TOKEN"),
-		TokenTest:   os.Getenv("DISCORD_TOKEN_TEST"),
-		DBPath:      os.Getenv("DATABASE_PATH"),
-		Tick:        os.Getenv("TICK_INTERVAL"),
-		DryRun:      os.Getenv("DRY_RUN"),
-		TestGuildID: os.Getenv("TEST_GUILD_ID"),
+		Env:          os.Getenv("BOT_ENV"),
+		Token:        os.Getenv("DISCORD_TOKEN"),
+		TokenTest:    os.Getenv("DISCORD_TOKEN_TEST"),
+		DBPath:       os.Getenv("DATABASE_PATH"),
+		Tick:         os.Getenv("TICK_INTERVAL"),
+		AnimePoll:    os.Getenv("ANIME_POLL_INTERVAL"),
+		AnimeFeedURL: os.Getenv("ANIME_FEED_URL"),
+		S3AccessKey:  os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey:  os.Getenv("S3_SECRET_KEY"),
+		S3Bucket:     os.Getenv("S3_BUCKET"),
+		S3Region:     os.Getenv("S3_REGION"),
+		S3Prefix:     os.Getenv("S3_PREFIX"),
+		DryRun:       os.Getenv("DRY_RUN"),
+		TestGuildID:  os.Getenv("TEST_GUILD_ID"),
 	}
 }
 
@@ -97,6 +133,12 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		tick = d
 	}
 
+	animePollStr := fallback(e.AnimePoll, f.Anime.PollInterval, "1m")
+	animePoll := time.Minute
+	if d, err := time.ParseDuration(animePollStr); err == nil {
+		animePoll = d
+	}
+
 	dry := f.DryRun
 	if e.DryRun == "1" || e.DryRun == "true" || e.DryRun == "TRUE" {
 		dry = true
@@ -105,12 +147,19 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 	testGuild := fallback(e.TestGuildID, f.TestGuildID, "")
 
 	return Config{
-		DiscordToken: token,
-		DatabasePath: dbPath,
-		TickInterval: tick,
-		Env:          env,
-		DryRun:       dry,
-		TestGuildID:  testGuild,
+		DiscordToken:      token,
+		DatabasePath:      dbPath,
+		TickInterval:      tick,
+		AnimePollInterval: animePoll,
+		AnimeFeedURL:      fallback(e.AnimeFeedURL, f.Anime.FeedURL, ""),
+		S3AccessKey:       fallback(e.S3AccessKey, f.AWS.S3AccessKey, ""),
+		S3SecretKey:       fallback(e.S3SecretKey, f.AWS.S3SecretKey, ""),
+		S3Bucket:          fallback(e.S3Bucket, f.Anime.Bucket, ""),
+		S3Region:          fallback(e.S3Region, f.AWS.S3Region, ""),
+		S3Prefix:          fallback(e.S3Prefix, f.Anime.Prefix, ""),
+		Env:               env,
+		DryRun:            dry,
+		TestGuildID:       testGuild,
 	}, nil
 }
 
