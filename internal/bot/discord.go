@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"mizubot-go/internal/animefeed"
@@ -50,6 +51,7 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service) 
 		modules:   modules,
 	}
 	s.AddHandler(b.onInteractionCreate)
+	s.AddHandler(b.onMessageCreate)
 	return b, nil
 }
 
@@ -137,6 +139,22 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	}
 }
 
+func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if s == nil || s.State == nil || s.State.User == nil || m == nil || m.Author == nil {
+		return
+	}
+	if m.Author.ID == s.State.User.ID || m.Content == "" {
+		return
+	}
+	if !messageMentionsUser(m.Content, s.State.User.ID) {
+		return
+	}
+	if b.dryRun {
+		return
+	}
+	_, _ = s.ChannelMessageSendReply(m.ChannelID, "Hello", m.Reference())
+}
+
 func (b *Bot) Respond(i *discordgo.InteractionCreate, content string, ephemeral bool) {
 	var flags discordgo.MessageFlags
 	if ephemeral {
@@ -160,4 +178,8 @@ func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.Mess
 			Flags:  flags,
 		},
 	})
+}
+
+func messageMentionsUser(content, userID string) bool {
+	return strings.Contains(content, "<@"+userID+">") || strings.Contains(content, "<@!"+userID+">")
 }

@@ -16,6 +16,7 @@ const defaultFeedURL = "https://nyaa.si/?page=rss&c=1_2&f=0"
 var parser = gofeed.NewParser()
 var hrefPattern = regexp.MustCompile(`href="([^"]+)"`)
 var tagPattern = regexp.MustCompile(`<[^>]+>`)
+var viewLinkPattern = regexp.MustCompile(`^https://nyaa\.si/view/([0-9]+)(?:#.*)?$`)
 
 type FeedItem struct {
 	GUID        string
@@ -52,6 +53,7 @@ func fetchFeedItems(feedURL string) ([]FeedItem, error) {
 		if descriptionLink := firstHref(item.Description); descriptionLink != "" {
 			link = descriptionLink
 		}
+		link = torrentLink(link)
 
 		items = append(items, FeedItem{
 			GUID:        strings.TrimSpace(item.GUID),
@@ -115,4 +117,19 @@ func cleanDescription(description string) string {
 		description = description[:277] + "..."
 	}
 	return description
+}
+
+func torrentLink(link string) string {
+	link = strings.TrimSpace(link)
+	if link == "" {
+		return ""
+	}
+	if strings.Contains(link, "/download/") && strings.HasSuffix(link, ".torrent") {
+		return link
+	}
+	matches := viewLinkPattern.FindStringSubmatch(link)
+	if len(matches) == 2 {
+		return "https://nyaa.si/download/" + matches[1] + ".torrent"
+	}
+	return link
 }

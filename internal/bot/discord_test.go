@@ -38,3 +38,20 @@ func TestRegisterCommandsRequiresOpen(t *testing.T) {
 		t.Fatalf("unexpected error after session ready: %v", err)
 	}
 }
+
+func TestMessageMentionsUser(t *testing.T) {
+	tests := []struct {
+		content string
+		want    bool
+	}{
+		{content: "hello <@123>", want: true},
+		{content: "hello <@!123>", want: true},
+		{content: "hello 123", want: false},
+	}
+
+	for _, tt := range tests {
+		if got := messageMentionsUser(tt.content, "123"); got != tt.want {
+			t.Fatalf("messageMentionsUser(%q) = %v, want %v", tt.content, got, tt.want)
+		}
+	}
+}
