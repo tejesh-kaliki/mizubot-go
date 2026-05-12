@@ -13,18 +13,20 @@ import (
 )
 
 type S3PublisherConfig struct {
-	AccessKey string
-	SecretKey string
-	Region    string
-	Bucket    string
-	Prefix    string
+	AccessKey         string
+	SecretKey         string
+	Region            string
+	Bucket            string
+	Prefix            string
+	PublicFeedBaseURL string
 }
 
 type S3Publisher struct {
-	client *s3.Client
-	bucket string
-	prefix string
-	region string
+	client            *s3.Client
+	bucket            string
+	prefix            string
+	region            string
+	publicFeedBaseURL string
 }
 
 func NewS3Publisher(ctx context.Context, cfg S3PublisherConfig) (*S3Publisher, error) {
@@ -42,10 +44,11 @@ func NewS3Publisher(ctx context.Context, cfg S3PublisherConfig) (*S3Publisher, e
 	}
 
 	return &S3Publisher{
-		client: s3.NewFromConfig(awsCfg),
-		bucket: cfg.Bucket,
-		prefix: strings.Trim(strings.TrimSpace(cfg.Prefix), "/"),
-		region: cfg.Region,
+		client:            s3.NewFromConfig(awsCfg),
+		bucket:            cfg.Bucket,
+		prefix:            strings.Trim(strings.TrimSpace(cfg.Prefix), "/"),
+		region:            cfg.Region,
+		publicFeedBaseURL: strings.TrimRight(strings.TrimSpace(cfg.PublicFeedBaseURL), "/"),
 	}, nil
 }
 
@@ -66,7 +69,26 @@ func (p *S3Publisher) PublishUserFeed(ctx context.Context, userID string, body s
 		return "", err
 	}
 
-	return fmt.Sprintf("s3://%s/%s", p.bucket, key), nil
+	return p.userFeedURLForKey(key), nil
 }
 
 func stringPtr(v string) *string { return &v }
+
+func (p *S3Publisher) UserFeedURL(userID string) string {
+	filename := fmt.Sprintf("%s.xml", userID)
+	if p.publicFeedBaseURL != "" {
+		return p.publicFeedBaseURL + "/" + filename
+	}
+	key := filename
+	if p.prefix != "" {
+		key = path.Join(p.prefix, key)
+	}
+	return p.userFeedURLForKey(key)
+}
+
+func (p *S3Publisher) userFeedURLForKey(key string) string {
+	if p.publicFeedBaseURL != "" {
+		return p.publicFeedBaseURL + "/" + key
+	}
+	return fmt.Sprintf("s3://%s/%s", p.bucket, key)
+}

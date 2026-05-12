@@ -50,11 +50,12 @@ func main() {
 	var publisher animefeed.Publisher
 	if cfg.S3AccessKey != "" && cfg.S3SecretKey != "" && cfg.S3Bucket != "" && cfg.S3Region != "" {
 		s3Publisher, err := animefeed.NewS3Publisher(ctx, animefeed.S3PublisherConfig{
-			AccessKey: cfg.S3AccessKey,
-			SecretKey: cfg.S3SecretKey,
-			Bucket:    cfg.S3Bucket,
-			Region:    cfg.S3Region,
-			Prefix:    cfg.S3Prefix,
+			AccessKey:         cfg.S3AccessKey,
+			SecretKey:         cfg.S3SecretKey,
+			Bucket:            cfg.S3Bucket,
+			Region:            cfg.S3Region,
+			Prefix:            cfg.S3Prefix,
+			PublicFeedBaseURL: cfg.AnimePublicFeedBaseURL,
 		})
 		if err != nil {
 			log.Fatalf("s3 publisher init error: %v", err)

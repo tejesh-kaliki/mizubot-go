@@ -2,7 +2,6 @@ package bot
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"mizubot-go/internal/animefeed"
@@ -75,23 +74,16 @@ func (b *Bot) SendAnimeNotification(channelID string, embed animefeed.AnimeNotif
 		return nil
 	}
 
-	description := strings.TrimSpace(embed.Description)
-	if description == "" {
-		description = "New Nyaa match found."
-	}
-	if len(description) > 400 {
-		description = description[:397] + "..."
-	}
-
 	msgEmbed := &discordgo.MessageEmbed{
-		Title:       embed.Title,
-		URL:         embed.Link,
-		Description: description,
-		Color:       0x2E8B57,
+		Title: embed.Title,
+		URL:   embed.Link,
+		Color: 0x2E8B57,
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "Follow", Value: embed.FollowName, Inline: true},
 			{Name: "User", Value: "<@" + embed.UserID + ">", Inline: true},
+			{Name: "Release", Value: "[Open on Nyaa](" + embed.Link + ")", Inline: false},
 		},
+		Footer: &discordgo.MessageEmbedFooter{Text: "New anime feed match"},
 	}
 	if embed.PublishedAt != nil {
 		msgEmbed.Timestamp = embed.PublishedAt.UTC().Format(time.RFC3339)
@@ -153,5 +145,19 @@ func (b *Bot) Respond(i *discordgo.InteractionCreate, content string, ephemeral 
 	_ = b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: content, Flags: flags},
+	})
+}
+
+func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, ephemeral bool) {
+	var flags discordgo.MessageFlags
+	if ephemeral {
+		flags = discordgo.MessageFlagsEphemeral
+	}
+	_ = b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{embed},
+			Flags:  flags,
+		},
 	})
 }

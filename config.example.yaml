@@ -5,6 +5,7 @@ tick_interval: "10s"
 anime:
   poll_interval: "1m"
   feed_url: "https://nyaa.si/?page=rss&c=1_2&f=0"
+  public_feed_base_url: "https://feeds.example.com"
   bucket: "mizubot-anime-feeds"
   prefix: "anime"
 aws:

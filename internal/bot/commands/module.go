@@ -8,6 +8,7 @@ import "github.com/bwmarrin/discordgo"
 
 type Responder interface {
 	Respond(i *discordgo.InteractionCreate, content string, ephemeral bool)
+	RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, ephemeral bool)
 }
 
 type Module interface {

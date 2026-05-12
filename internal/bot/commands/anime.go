@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"mizubot-go/internal/animefeed"
 
 	"github.com/bwmarrin/discordgo"
 )
+
+const animeEmbedColor = 0x2E8B57
+const animeListPageSize = 5
 
 type AnimeModule struct {
 	service *animefeed.Service
@@ -32,7 +36,7 @@ func (m *AnimeModule) Definitions() []*discordgo.ApplicationCommand {
 					Options: []*discordgo.ApplicationCommandOption{
 						{Type: discordgo.ApplicationCommandOptionString, Name: "name", Description: "Label for this follow entry", Required: true},
 						{Type: discordgo.ApplicationCommandOptionString, Name: "keywords", Description: "Comma-separated keywords to match in the Nyaa title", Required: true},
-						{Type: discordgo.ApplicationCommandOptionChannel, Name: "channel", Description: "Optional channel for notifications", Required: false},
+						{Type: discordgo.ApplicationCommandOptionChannel, Name: "channel", Description: "Optional per-follow override channel", Required: false},
 					},
 				},
 				{
@@ -54,8 +58,24 @@ func (m *AnimeModule) Definitions() []*discordgo.ApplicationCommand {
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "feed",
+					Description: "Show your generated anime feed URL",
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "list",
-					Description: "List your anime follows, channels, and latest match",
+					Description: "List your anime follows",
+					Options: []*discordgo.ApplicationCommandOption{
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "page", Description: "Page number", Required: false},
+					},
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionSubCommand,
+					Name:        "show",
+					Description: "Show details for one follow entry",
+					Options: []*discordgo.ApplicationCommandOption{
+						{Type: discordgo.ApplicationCommandOptionString, Name: "name", Description: "Follow entry name", Required: true},
+					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -88,8 +108,12 @@ func (m *AnimeModule) Handle(responder Responder, _ *discordgo.Session, i *disco
 		m.handleChannel(responder, i)
 	case "default-channel":
 		m.handleDefaultChannel(responder, i)
+	case "feed":
+		m.handleFeed(responder, i)
 	case "list":
 		m.handleList(responder, i)
+	case "show":
+		m.handleShow(responder, i)
 	case "unfollow":
 		m.handleUnfollow(responder, i)
 	default:
@@ -130,11 +154,20 @@ func (m *AnimeModule) handleFollow(responder Responder, i *discordgo.Interaction
 		return
 	}
 
-	channelMsg := "using your default notification channel"
+	channelValue := "Default channel"
 	if entry.ChannelID != "" {
-		channelMsg = fmt.Sprintf("override channel <#%s>", entry.ChannelID)
+		channelValue = "<#" + entry.ChannelID + ">"
 	}
-	responder.Respond(i, fmt.Sprintf("Created follow `%s` with keywords `%s` and %s.", entry.Name, strings.Join(entry.Keywords, ", "), channelMsg), true)
+
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title: "Anime Follow Added",
+		Color: animeEmbedColor,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Name", Value: entry.Name, Inline: true},
+			{Name: "Channel", Value: channelValue, Inline: true},
+			{Name: "Keywords", Value: strings.Join(entry.Keywords, ", "), Inline: false},
+		},
+	}, true)
 }
 
 func (m *AnimeModule) handleChannel(responder Responder, i *discordgo.InteractionCreate) {
@@ -165,11 +198,19 @@ func (m *AnimeModule) handleChannel(responder Responder, i *discordgo.Interactio
 		return
 	}
 
-	if channelID == "" {
-		responder.Respond(i, fmt.Sprintf("Cleared per-follow channel override for `%s`. It will use your default channel.", name), true)
-		return
+	channelValue := "Default channel"
+	if channelID != "" {
+		channelValue = "<#" + channelID + ">"
 	}
-	responder.Respond(i, fmt.Sprintf("Set per-follow channel override for `%s` to <#%s>.", name, channelID), true)
+
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title: "Anime Follow Channel Updated",
+		Color: animeEmbedColor,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Follow", Value: name, Inline: true},
+			{Name: "Effective Channel", Value: channelValue, Inline: true},
+		},
+	}, true)
 }
 
 func (m *AnimeModule) handleDefaultChannel(responder Responder, i *discordgo.InteractionCreate) {
@@ -191,11 +232,44 @@ func (m *AnimeModule) handleDefaultChannel(responder Responder, i *discordgo.Int
 		responder.Respond(i, err.Error(), true)
 		return
 	}
-	if settings.DefaultChannelID == "" {
-		responder.Respond(i, "Cleared your default anime notification channel.", true)
+
+	channelValue := "Not set"
+	if settings.DefaultChannelID != "" {
+		channelValue = "<#" + settings.DefaultChannelID + ">"
+	}
+
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title: "Default Anime Channel Updated",
+		Color: animeEmbedColor,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Default Channel", Value: channelValue, Inline: true},
+		},
+	}, true)
+}
+
+func (m *AnimeModule) handleFeed(responder Responder, i *discordgo.InteractionCreate) {
+	userID := userIDFromInteraction(i)
+	if userID == "" {
+		responder.Respond(i, "Unable to identify the user.", true)
 		return
 	}
-	responder.Respond(i, fmt.Sprintf("Set your default anime notification channel to <#%s>.", settings.DefaultChannelID), true)
+
+	feedURL := m.service.FeedURL(userID)
+	if feedURL == "" {
+		responder.RespondEmbed(i, &discordgo.MessageEmbed{
+			Title:       "Anime Feed URL",
+			Color:       animeEmbedColor,
+			Description: "Public feed URL is not configured yet.",
+		}, true)
+		return
+	}
+
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title:       "Anime Feed URL",
+		Color:       animeEmbedColor,
+		Description: "[Open feed](" + feedURL + ")",
+		Footer:      &discordgo.MessageEmbedFooter{Text: "Use this in your RSS reader"},
+	}, true)
 }
 
 func (m *AnimeModule) handleList(responder Responder, i *discordgo.InteractionCreate) {
@@ -203,6 +277,16 @@ func (m *AnimeModule) handleList(responder Responder, i *discordgo.InteractionCr
 	if userID == "" {
 		responder.Respond(i, "Unable to identify the user.", true)
 		return
+	}
+
+	page := 1
+	for _, opt := range i.ApplicationCommandData().Options[0].Options {
+		if opt.Name == "page" {
+			page = int(opt.IntValue())
+		}
+	}
+	if page <= 0 {
+		page = 1
 	}
 
 	entries, err := m.service.ListFollows(context.Background(), userID)
@@ -217,38 +301,95 @@ func (m *AnimeModule) handleList(responder Responder, i *discordgo.InteractionCr
 		responder.Respond(i, "Failed to load anime settings.", true)
 		return
 	}
+
+	feedURL := m.service.FeedURL(userID)
+	description := fmt.Sprintf("Default channel: %s", renderChannelOrFallback(settings.DefaultChannelID, "Not set"))
+	if feedURL != "" {
+		description += "\nFeed: [Open feed](" + feedURL + ")"
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       "Anime Follows",
+		Color:       animeEmbedColor,
+		Description: description,
+	}
+
 	if len(entries) == 0 {
-		if settings.DefaultChannelID == "" {
-			responder.Respond(i, "You have no anime follows and no default channel set.", true)
-			return
-		}
-		responder.Respond(i, fmt.Sprintf("You have no anime follows. Default channel: <#%s>.", settings.DefaultChannelID), true)
+		embed.Description += "\n\nNo follows configured."
+		responder.RespondEmbed(i, embed, true)
 		return
 	}
 
-	var b strings.Builder
-	if settings.DefaultChannelID != "" {
-		fmt.Fprintf(&b, "Default channel: <#%s>\n", settings.DefaultChannelID)
-	} else {
-		b.WriteString("Default channel: not set\n")
+	totalPages := (len(entries) + animeListPageSize - 1) / animeListPageSize
+	if page > totalPages {
+		page = totalPages
 	}
-	for _, entry := range entries {
-		fmt.Fprintf(&b, "%s - keywords: %s", entry.Name, strings.Join(entry.Keywords, ", "))
-		if entry.ChannelID != "" {
-			fmt.Fprintf(&b, " - override: <#%s>", entry.ChannelID)
-		} else if settings.DefaultChannelID != "" {
-			fmt.Fprintf(&b, " - channel: default <#%s>", settings.DefaultChannelID)
-		}
-		if entry.LatestTitle != "" {
-			fmt.Fprintf(&b, " - latest: %s", entry.LatestTitle)
-			if entry.LatestLink != "" {
-				fmt.Fprintf(&b, " (%s)", entry.LatestLink)
-			}
-		}
-		b.WriteString("\n")
+	start := (page - 1) * animeListPageSize
+	end := start + animeListPageSize
+	if end > len(entries) {
+		end = len(entries)
 	}
 
-	responder.Respond(i, strings.TrimSpace(b.String()), true)
+	fields := make([]*discordgo.MessageEmbedField, 0, end-start)
+	for _, entry := range entries[start:end] {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   entry.Name,
+			Value:  formatAnimeListEntryField(entry, settings.DefaultChannelID),
+			Inline: false,
+		})
+	}
+	embed.Fields = fields
+	embed.Footer = &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("Page %d/%d • Use /anime show name:<name> for full details", page, totalPages),
+	}
+	responder.RespondEmbed(i, embed, true)
+}
+
+func (m *AnimeModule) handleShow(responder Responder, i *discordgo.InteractionCreate) {
+	userID := userIDFromInteraction(i)
+	if userID == "" {
+		responder.Respond(i, "Unable to identify the user.", true)
+		return
+	}
+
+	var name string
+	for _, opt := range i.ApplicationCommandData().Options[0].Options {
+		if opt.Name == "name" {
+			name = opt.StringValue()
+		}
+	}
+
+	entries, err := m.service.ListFollows(context.Background(), userID)
+	if err != nil {
+		log.Printf("show anime follow error: %v", err)
+		responder.Respond(i, "Failed to load anime follow.", true)
+		return
+	}
+	settings, err := m.service.GetSettings(context.Background(), userID)
+	if err != nil {
+		log.Printf("get anime settings error: %v", err)
+		responder.Respond(i, "Failed to load anime settings.", true)
+		return
+	}
+
+	var match *animefeed.Entry
+	for idx := range entries {
+		if strings.EqualFold(entries[idx].Name, strings.TrimSpace(name)) {
+			match = &entries[idx]
+			break
+		}
+	}
+	if match == nil {
+		responder.Respond(i, "Follow entry not found.", true)
+		return
+	}
+
+	embed := &discordgo.MessageEmbed{
+		Title:       match.Name,
+		Color:       animeEmbedColor,
+		Description: formatAnimeShowEntry(match, settings.DefaultChannelID, m.service.FeedURL(userID)),
+	}
+	responder.RespondEmbed(i, embed, true)
 }
 
 func (m *AnimeModule) handleUnfollow(responder Responder, i *discordgo.InteractionCreate) {
@@ -276,7 +417,13 @@ func (m *AnimeModule) handleUnfollow(responder Responder, i *discordgo.Interacti
 		return
 	}
 
-	responder.Respond(i, fmt.Sprintf("Deleted follow `%s`.", name), true)
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title: "Anime Follow Removed",
+		Color: animeEmbedColor,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Name", Value: name, Inline: true},
+		},
+	}, true)
 }
 
 func channelIDFromOption(opt *discordgo.ApplicationCommandInteractionDataOption) string {
@@ -288,4 +435,69 @@ func channelIDFromOption(opt *discordgo.ApplicationCommandInteractionDataOption)
 		return ""
 	}
 	return v
+}
+
+func renderChannelOrFallback(channelID, fallback string) string {
+	if channelID == "" {
+		return fallback
+	}
+	return "<#" + channelID + ">"
+}
+
+func formatAnimeListEntryField(entry animefeed.Entry, defaultChannelID string) string {
+	var b strings.Builder
+	if entry.ChannelID != "" {
+		fmt.Fprintf(&b, "Channel: %s (override)", renderChannelOrFallback(entry.ChannelID, "Not set"))
+	} else {
+		fmt.Fprintf(&b, "Channel: %s", renderChannelOrFallback(defaultChannelID, "Not set"))
+	}
+	if entry.LatestTitle != "" {
+		b.WriteString("\n")
+		if entry.LatestLink != "" {
+			fmt.Fprintf(&b, "Latest: [%s](%s)", trimForField(entry.LatestTitle, 120), entry.LatestLink)
+		} else {
+			fmt.Fprintf(&b, "Latest: %s", trimForField(entry.LatestTitle, 120))
+		}
+	}
+	if entry.LatestPublishedAt != nil {
+		b.WriteString("\n")
+		fmt.Fprintf(&b, "Published: %s", entry.LatestPublishedAt.UTC().Format(time.RFC3339))
+	}
+	return b.String()
+}
+
+func formatAnimeShowEntry(entry *animefeed.Entry, defaultChannelID, feedURL string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Keywords: `%s`", strings.Join(entry.Keywords, "`, `"))
+	b.WriteString("\n")
+	if entry.ChannelID != "" {
+		fmt.Fprintf(&b, "Channel: %s (override)", renderChannelOrFallback(entry.ChannelID, "Not set"))
+	} else {
+		fmt.Fprintf(&b, "Channel: %s", renderChannelOrFallback(defaultChannelID, "Not set"))
+	}
+	if entry.LatestTitle != "" {
+		b.WriteString("\n")
+		if entry.LatestLink != "" {
+			fmt.Fprintf(&b, "Latest: [%s](%s)", trimForField(entry.LatestTitle, 160), entry.LatestLink)
+		} else {
+			fmt.Fprintf(&b, "Latest: %s", trimForField(entry.LatestTitle, 160))
+		}
+	}
+	if entry.LatestPublishedAt != nil {
+		b.WriteString("\n")
+		fmt.Fprintf(&b, "Published: %s", entry.LatestPublishedAt.UTC().Format(time.RFC3339))
+	}
+	if feedURL != "" {
+		b.WriteString("\n")
+		fmt.Fprintf(&b, "Feed: [Open feed](%s)", feedURL)
+	}
+	return b.String()
+}
+
+func trimForField(v string, limit int) string {
+	v = strings.TrimSpace(v)
+	if len(v) <= limit {
+		return v
+	}
+	return v[:limit-3] + "..."
 }

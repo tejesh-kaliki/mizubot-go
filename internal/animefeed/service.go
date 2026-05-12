@@ -18,6 +18,7 @@ const recentMatchLimit = 50
 
 type Publisher interface {
 	PublishUserFeed(ctx context.Context, userID string, body string) (string, error)
+	UserFeedURL(userID string) string
 }
 
 type Notifier interface {
@@ -175,6 +176,13 @@ func (s *Service) SetDefaultChannel(ctx context.Context, userID, channelID strin
 		return Settings{}, err
 	}
 	return convertSettings(rec), nil
+}
+
+func (s *Service) FeedURL(userID string) string {
+	if s.publisher == nil {
+		return ""
+	}
+	return s.publisher.UserFeedURL(userID)
 }
 
 func (s *Service) Unfollow(ctx context.Context, userID, name string) (bool, error) {

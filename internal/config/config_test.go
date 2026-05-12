@@ -13,6 +13,7 @@ tick_interval: "2s"
 anime:
   poll_interval: "1m"
   feed_url: "https://example.com/feed.xml"
+  public_feed_base_url: "https://feeds.example.com"
   bucket: "bucket"
   prefix: "feeds"
 aws:
@@ -52,6 +53,9 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 	}
 	if cfg.AnimeFeedURL != "https://example.com/feed.xml" {
 		t.Fatalf("anime feed url: %s", cfg.AnimeFeedURL)
+	}
+	if cfg.AnimePublicFeedBaseURL != "https://feeds.example.com" {
+		t.Fatalf("anime public feed base url: %s", cfg.AnimePublicFeedBaseURL)
 	}
 	if cfg.S3Bucket != "bucket" || cfg.S3Region != "us-east-1" || cfg.S3Prefix != "feeds" {
 		t.Fatalf("s3 config mismatch: %#v", cfg)

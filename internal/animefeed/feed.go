@@ -1,7 +1,9 @@
 package animefeed
 
 import (
+	"html"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 const defaultFeedURL = "https://nyaa.si/?page=rss&c=1_2&f=0"
 
 var parser = gofeed.NewParser()
+var hrefPattern = regexp.MustCompile(`href="([^"]+)"`)
+var tagPattern = regexp.MustCompile(`<[^>]+>`)
 
 type FeedItem struct {
 	GUID        string
@@ -44,11 +48,16 @@ func fetchFeedItems(feedURL string) ([]FeedItem, error) {
 			published = &t
 		}
 
+		link := strings.TrimSpace(item.Link)
+		if descriptionLink := firstHref(item.Description); descriptionLink != "" {
+			link = descriptionLink
+		}
+
 		items = append(items, FeedItem{
 			GUID:        strings.TrimSpace(item.GUID),
 			Title:       item.Title,
-			Link:        item.Link,
-			Description: item.Description,
+			Link:        link,
+			Description: cleanDescription(item.Description),
 			PublishedAt: published,
 		})
 	}
@@ -88,4 +97,22 @@ func buildUserFeedXML(feedName string, items []FeedItem) (string, error) {
 	}
 
 	return feed.ToRss()
+}
+
+func firstHref(description string) string {
+	matches := hrefPattern.FindStringSubmatch(description)
+	if len(matches) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(html.UnescapeString(matches[1]))
+}
+
+func cleanDescription(description string) string {
+	description = tagPattern.ReplaceAllString(description, " ")
+	description = html.UnescapeString(description)
+	description = strings.Join(strings.Fields(description), " ")
+	if len(description) > 280 {
+		description = description[:277] + "..."
+	}
+	return description
 }
