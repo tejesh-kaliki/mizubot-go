@@ -69,7 +69,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sched := scheduler.New(store, discordBot.SendReminderMessage, cfg.TickInterval)
+	sched := scheduler.New(store, discordBot.SendChannelMessage, cfg.TickInterval)
 	sched.Start(ctx)
 
 	log.Printf("MizuBot is running. Tick: %s", cfg.TickInterval.String())
