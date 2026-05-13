@@ -291,7 +291,7 @@ func (s *Service) Sync(ctx context.Context, notifier Notifier) ([]UserFeed, erro
 					UserID:      entry.UserID,
 					FollowName:  entry.Name,
 					Title:       item.Title,
-					Link:        item.Link,
+					Link:        item.GUID, // GUID is the nyaa view link
 					Description: item.Description,
 					PublishedAt: item.PublishedAt,
 				}); err != nil {

@@ -12,8 +12,10 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const animeEmbedColor = 0x2E8B57
-const animeListPageSize = 5
+const (
+	animeEmbedColor   = 0x2E8B57
+	animeListPageSize = 5
+)
 
 type AnimeModule struct {
 	service *animefeed.Service
@@ -453,8 +455,8 @@ func formatAnimeListEntryField(entry animefeed.Entry, defaultChannelID string) s
 	}
 	if entry.LatestTitle != "" {
 		b.WriteString("\n")
-		if entry.LatestLink != "" {
-			fmt.Fprintf(&b, "Latest: [%s](%s)", trimForField(entry.LatestTitle, 120), entry.LatestLink)
+		if entry.LatestGUID != "" {
+			fmt.Fprintf(&b, "Latest: [%s](%s)", trimForField(entry.LatestTitle, 120), entry.LatestGUID)
 		} else {
 			fmt.Fprintf(&b, "Latest: %s", trimForField(entry.LatestTitle, 120))
 		}
@@ -477,8 +479,8 @@ func formatAnimeShowEntry(entry *animefeed.Entry, defaultChannelID, feedURL stri
 	}
 	if entry.LatestTitle != "" {
 		b.WriteString("\n")
-		if entry.LatestLink != "" {
-			fmt.Fprintf(&b, "Latest: [%s](%s)", trimForField(entry.LatestTitle, 160), entry.LatestLink)
+		if entry.LatestGUID != "" {
+			fmt.Fprintf(&b, "Latest: [%s](%s)", trimForField(entry.LatestTitle, 160), entry.LatestGUID)
 		} else {
 			fmt.Fprintf(&b, "Latest: %s", trimForField(entry.LatestTitle, 160))
 		}

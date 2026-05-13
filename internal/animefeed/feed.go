@@ -13,10 +13,10 @@ import (
 
 const defaultFeedURL = "https://nyaa.si/?page=rss&c=1_2&f=0"
 
-var parser = gofeed.NewParser()
-var hrefPattern = regexp.MustCompile(`href="([^"]+)"`)
-var tagPattern = regexp.MustCompile(`<[^>]+>`)
-var viewLinkPattern = regexp.MustCompile(`^https://nyaa\.si/view/([0-9]+)(?:#.*)?$`)
+var (
+	parser     = gofeed.NewParser()
+	tagPattern = regexp.MustCompile(`<[^>]+>`)
+)
 
 type FeedItem struct {
 	GUID        string
@@ -50,11 +50,6 @@ func fetchFeedItems(feedURL string) ([]FeedItem, error) {
 		}
 
 		link := strings.TrimSpace(item.Link)
-		if descriptionLink := firstHref(item.Description); descriptionLink != "" {
-			link = descriptionLink
-		}
-		link = torrentLink(link)
-
 		items = append(items, FeedItem{
 			GUID:        strings.TrimSpace(item.GUID),
 			Title:       item.Title,
@@ -101,14 +96,6 @@ func buildUserFeedXML(feedName string, items []FeedItem) (string, error) {
 	return feed.ToRss()
 }
 
-func firstHref(description string) string {
-	matches := hrefPattern.FindStringSubmatch(description)
-	if len(matches) < 2 {
-		return ""
-	}
-	return strings.TrimSpace(html.UnescapeString(matches[1]))
-}
-
 func cleanDescription(description string) string {
 	description = tagPattern.ReplaceAllString(description, " ")
 	description = html.UnescapeString(description)
@@ -117,19 +104,4 @@ func cleanDescription(description string) string {
 		description = description[:277] + "..."
 	}
 	return description
-}
-
-func torrentLink(link string) string {
-	link = strings.TrimSpace(link)
-	if link == "" {
-		return ""
-	}
-	if strings.Contains(link, "/download/") && strings.HasSuffix(link, ".torrent") {
-		return link
-	}
-	matches := viewLinkPattern.FindStringSubmatch(link)
-	if len(matches) == 2 {
-		return "https://nyaa.si/download/" + matches[1] + ".torrent"
-	}
-	return link
 }
