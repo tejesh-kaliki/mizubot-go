@@ -88,7 +88,7 @@ func main() {
 		}
 	}
 
-	sched := scheduler.New(store, discordBot.SendChannelMessage, cfg.TickInterval)
+	sched := scheduler.New(store, discordBot.SendReminder, cfg.TickInterval)
 	sched.Start(ctx)
 
 	animePoller := animefeed.NewPoller(animeService, discordBot, cfg.AnimePollInterval)

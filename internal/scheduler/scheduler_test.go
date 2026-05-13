@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -39,23 +40,47 @@ func openTestDB(t *testing.T) *sql.DB {
 func TestSchedulerSendsAndReschedules(t *testing.T) {
 	db := openTestDB(t)
 	store := reminders.NewStore(db)
-	now := time.Now().Add(-time.Second)
+	now := time.Now().UTC()
 	r := &reminders.Reminder{UserID: "u", ChannelID: "c", Message: "msg", Schedule: reminders.ScheduleHourly, NextRun: now}
 	if err := store.Create(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
 
 	var sent int32
-	s := New(store, func(channelID, content string) error {
+	s := New(store, func(reminder reminders.Reminder) error {
+		if reminder.UserID != "u" || reminder.ChannelID != "c" || reminder.Message != "msg" {
+			t.Fatalf("unexpected reminder payload: %+v", reminder)
+		}
 		atomic.AddInt32(&sent, 1)
 		return nil
 	}, 10*time.Millisecond)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	s.Start(ctx)
-	time.Sleep(50 * time.Millisecond)
+	s.runOnce(context.Background(), now.Add(time.Second))
 	if atomic.LoadInt32(&sent) == 0 {
 		t.Fatalf("expected at least 1 send")
+	}
+}
+
+func TestSchedulerKeepsReminderDueWhenSendFails(t *testing.T) {
+	db := openTestDB(t)
+	store := reminders.NewStore(db)
+	now := time.Now().UTC()
+	r := &reminders.Reminder{UserID: "u", ChannelID: "c", Message: "msg", Schedule: reminders.ScheduleOnce, NextRun: now}
+	if err := store.Create(context.Background(), r); err != nil {
+		t.Fatal(err)
+	}
+
+	s := New(store, func(reminder reminders.Reminder) error {
+		return errors.New("send failed")
+	}, 10*time.Millisecond)
+
+	s.runOnce(context.Background(), now.Add(time.Second))
+
+	due, err := store.Due(context.Background(), now.Add(time.Second), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(due) != 1 || due[0].ID != r.ID {
+		t.Fatalf("expected reminder to remain due after send failure, got %+v", due)
 	}
 }

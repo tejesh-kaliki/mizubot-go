@@ -70,9 +70,13 @@ func nextRunForSchedule(now time.Time, schedule Schedule, at string) (time.Time,
 			nextRun := now.Add(5 * time.Minute)
 			return nextRun, sql.NullString{String: nextRun.Format(time.RFC3339), Valid: true}, nil
 		}
+		if duration, ok := parseRelativeDuration(at); ok {
+			nextRun := now.Add(duration)
+			return nextRun, sql.NullString{String: nextRun.Format(time.RFC3339), Valid: true}, nil
+		}
 		parsed, err := parseFlexibleTimeUTC(at)
 		if err != nil || !parsed.After(now) {
-			return time.Time{}, sql.NullString{}, errors.New("Invalid time. Use 'YYYY-MM-DD HH:MM' or ISO like '2025-01-31T15:04:05Z' (UTC).")
+			return time.Time{}, sql.NullString{}, errors.New("Invalid time. For once, use a duration like '10m', '2h', '3d', or an absolute UTC time like '2025-01-31 15:04'.")
 		}
 		return parsed, sql.NullString{String: parsed.Format(time.RFC3339), Valid: true}, nil
 	case ScheduleHourly:
@@ -144,4 +148,24 @@ func parseHourMinuteUTC(now time.Time, s string) (time.Time, error) {
 		return t, nil
 	}
 	return time.Time{}, errors.New("bad format")
+}
+
+func parseRelativeDuration(s string) (time.Duration, bool) {
+	s = strings.TrimSpace(strings.ToLower(s))
+	s = strings.TrimPrefix(s, "in ")
+	if s == "" {
+		return 0, false
+	}
+	if before, ok := strings.CutSuffix(s, "d"); ok {
+		days, err := time.ParseDuration(before + "h")
+		if err != nil || days <= 0 {
+			return 0, false
+		}
+		return days * 24, true
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d <= 0 {
+		return 0, false
+	}
+	return d, true
 }

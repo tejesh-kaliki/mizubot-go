@@ -38,10 +38,10 @@ See `db/migrations/0001_init.sql`.
 
 ### Command surface (slash commands)
 
-- `/remind add message:<string> schedule:(once|hourly|daily) at:<RFC3339|HH:MM>`
-  - For `once`: `at` must be RFC3339 (UTC), in the future
+- `/remind add message:<string> schedule:(once|hourly|daily) at:<10m|2h|3d|RFC3339|HH:MM|:MM>`
+  - For `once`: `at` may be a relative duration (`10m`, `2h`, `3d`) or an absolute UTC time (`YYYY-MM-DD HH:MM` / RFC3339)
   - For `daily`: `at` must be `HH:MM` (UTC)
-  - For `hourly`: `at` ignored
+  - For `hourly`: `at` may be `:MM` to run at a specific minute each hour
 - `/remind list` — Lists reminders for the invoking user
 - `/remind delete id:<number>` — Deletes a reminder by id (owned by the invoking user)
 
@@ -56,5 +56,3 @@ See `db/migrations/0001_init.sql`.
 - Add schedules (e.g., cron) by extending `Schedule` enum and `NextAfter`.
 - Add per-user time zones by storing TZ and converting inputs/outputs (Discord does not expose user time zones).
 - Replace SQLite with external DB by swapping the store implementation.
-
-

@@ -8,7 +8,7 @@ import (
 	"mizubot-go/internal/reminders"
 )
 
-type Sender func(channelID, content string) error
+type Sender func(reminder reminders.Reminder) error
 
 type Scheduler struct {
 	store   *reminders.Store
@@ -49,9 +49,9 @@ func (s *Scheduler) runOnce(ctx context.Context, now time.Time) {
 		return
 	}
 	for _, r := range due {
-		// send message
-		if err := s.sender(r.ChannelID, r.Message); err != nil {
+		if err := s.sender(r); err != nil {
 			log.Printf("send error for reminder %d: %v", r.ID, err)
+			continue
 		}
 		// reschedule or delete
 		next, repeat, err := reminders.NextAfter(r, now)

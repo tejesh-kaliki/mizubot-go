@@ -77,3 +77,29 @@ func TestNextAfter(t *testing.T) {
 		t.Fatalf("once: next=%v rep=%v err=%v", next, rep, err)
 	}
 }
+
+func TestNextRunForScheduleOnceRelative(t *testing.T) {
+	now := time.Date(2026, 5, 13, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		at   string
+		want time.Time
+	}{
+		{at: "10m", want: now.Add(10 * time.Minute)},
+		{at: "in 2h", want: now.Add(2 * time.Hour)},
+		{at: "3d", want: now.Add(72 * time.Hour)},
+	}
+
+	for _, tt := range tests {
+		got, atTime, err := nextRunForSchedule(now, ScheduleOnce, tt.at)
+		if err != nil {
+			t.Fatalf("nextRunForSchedule(%q): %v", tt.at, err)
+		}
+		if !got.Equal(tt.want) {
+			t.Fatalf("nextRunForSchedule(%q) = %v, want %v", tt.at, got, tt.want)
+		}
+		if !atTime.Valid || atTime.String != tt.want.Format(time.RFC3339) {
+			t.Fatalf("at_time for %q = %+v, want %s", tt.at, atTime, tt.want.Format(time.RFC3339))
+		}
+	}
+}

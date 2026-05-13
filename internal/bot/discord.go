@@ -71,6 +71,19 @@ func (b *Bot) SendChannelMessage(channelID, content string) error {
 	return err
 }
 
+func (b *Bot) SendReminder(reminder reminders.Reminder) error {
+	if b.dryRun {
+		return nil
+	}
+	_, err := b.session.ChannelMessageSendComplex(reminder.ChannelID, &discordgo.MessageSend{
+		Content: "<@" + reminder.UserID + ">\n\n" + reminder.Message,
+		AllowedMentions: &discordgo.MessageAllowedMentions{
+			Users: []string{reminder.UserID},
+		},
+	})
+	return err
+}
+
 func (b *Bot) SendAnimeNotification(channelID string, embed animefeed.AnimeNotificationEmbed) error {
 	if b.dryRun {
 		return nil
@@ -94,6 +107,9 @@ func (b *Bot) SendAnimeNotification(channelID string, embed animefeed.AnimeNotif
 	_, err := b.session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
 		Content: "<@" + embed.UserID + ">",
 		Embeds:  []*discordgo.MessageEmbed{msgEmbed},
+		AllowedMentions: &discordgo.MessageAllowedMentions{
+			Users: []string{embed.UserID},
+		},
 	})
 	return err
 }

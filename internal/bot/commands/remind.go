@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"mizubot-go/internal/reminders"
 
 	"github.com/bwmarrin/discordgo"
+)
+
+const (
+	reminderEmbedColor   = 0x5865F2
+	reminderListPageSize = 5
 )
 
 type RemindModule struct {
@@ -36,13 +42,17 @@ func (m *RemindModule) Definitions() []*discordgo.ApplicationCommand {
 							{Name: "hourly", Value: "hourly"},
 							{Name: "daily", Value: "daily"},
 						}},
-						{Type: discordgo.ApplicationCommandOptionString, Name: "at", Description: "When (UTC). Once: 'YYYY-MM-DD HH:MM' or ISO like '2025-01-31T15:04:05Z'. Daily: 'HH:MM'. Optional.", Required: false},
+						{Type: discordgo.ApplicationCommandOptionString, Name: "at", Description: "Once: 10m, 2h, or YYYY-MM-DD HH:MM. Daily: HH:MM. Hourly: :MM. Optional.", Required: false},
+						{Type: discordgo.ApplicationCommandOptionChannel, Name: "channel", Description: "Channel to send this reminder in; defaults to current channel", Required: false},
 					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
 					Name:        "list",
 					Description: "List your reminders",
+					Options: []*discordgo.ApplicationCommandOption{
+						{Type: discordgo.ApplicationCommandOptionInteger, Name: "page", Description: "Page number", Required: false},
+					},
 				},
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -84,6 +94,7 @@ func (m *RemindModule) Handle(responder Responder, _ *discordgo.Session, i *disc
 func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCreate) {
 	opts := i.ApplicationCommandData().Options[0].Options
 	var message, scheduleStr, at string
+	channelID := i.ChannelID
 	for _, o := range opts {
 		switch o.Name {
 		case "message":
@@ -92,6 +103,10 @@ func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCr
 			scheduleStr = o.StringValue()
 		case "at":
 			at = o.StringValue()
+		case "channel":
+			if selected := channelIDFromOption(o); selected != "" {
+				channelID = selected
+			}
 		}
 	}
 
@@ -104,7 +119,7 @@ func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCr
 
 	reminder, err := m.service.CreateReminder(context.Background(), reminders.CreateReminderInput{
 		UserID:    userID,
-		ChannelID: i.ChannelID,
+		ChannelID: channelID,
 		GuildID:   guildID,
 		Message:   message,
 		Schedule:  scheduleStr,
@@ -115,7 +130,18 @@ func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCr
 		return
 	}
 
-	responder.Respond(i, fmt.Sprintf("Created reminder %d scheduled at %s", reminder.ID, reminder.NextRun.Format("2006-01-02T15:04:05Z07:00")), true)
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title: "Reminder Added",
+		Color: reminderEmbedColor,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "ID", Value: fmt.Sprintf("%d", reminder.ID), Inline: true},
+			{Name: "Schedule", Value: string(reminder.Schedule), Inline: true},
+			{Name: "Channel", Value: renderChannelOrFallback(reminder.ChannelID, "Current channel"), Inline: true},
+			{Name: "Next Run", Value: formatReminderTime(reminder.NextRun), Inline: false},
+			{Name: "Message", Value: trimForField(reminder.Message, 900), Inline: false},
+		},
+		Footer: &discordgo.MessageEmbedFooter{Text: "Reminder delivery will mention you only"},
+	}, true)
 }
 
 func (m *RemindModule) handleList(responder Responder, i *discordgo.InteractionCreate) {
@@ -125,22 +151,55 @@ func (m *RemindModule) handleList(responder Responder, i *discordgo.InteractionC
 		return
 	}
 
+	page := 1
+	for _, opt := range i.ApplicationCommandData().Options[0].Options {
+		if opt.Name == "page" {
+			page = int(opt.IntValue())
+		}
+	}
+	if page <= 0 {
+		page = 1
+	}
+
 	list, err := m.service.ListUserReminders(context.Background(), userID)
 	if err != nil {
 		log.Printf("list reminders error: %v", err)
 		responder.Respond(i, "Failed to list reminders.", true)
 		return
 	}
+	embed := &discordgo.MessageEmbed{
+		Title: "Reminders",
+		Color: reminderEmbedColor,
+	}
 	if len(list) == 0 {
-		responder.Respond(i, "You have no reminders.", true)
+		embed.Description = "No reminders configured."
+		responder.RespondEmbed(i, embed, true)
 		return
 	}
 
-	var bld strings.Builder
-	for _, r := range list {
-		fmt.Fprintf(&bld, "ID %d - %s - next %s - %s\n", r.ID, r.Schedule, r.NextRun.Format("2006-01-02T15:04:05Z07:00"), r.Message)
+	totalPages := (len(list) + reminderListPageSize - 1) / reminderListPageSize
+	if page > totalPages {
+		page = totalPages
 	}
-	responder.Respond(i, bld.String(), true)
+	start := (page - 1) * reminderListPageSize
+	end := start + reminderListPageSize
+	if end > len(list) {
+		end = len(list)
+	}
+
+	fields := make([]*discordgo.MessageEmbedField, 0, end-start)
+	for _, r := range list[start:end] {
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:   fmt.Sprintf("#%d - %s", r.ID, r.Schedule),
+			Value:  formatReminderListEntry(r),
+			Inline: false,
+		})
+	}
+	embed.Fields = fields
+	embed.Footer = &discordgo.MessageEmbedFooter{
+		Text: fmt.Sprintf("Page %d/%d • Use /remind delete id:<id> to remove one", page, totalPages),
+	}
+	responder.RespondEmbed(i, embed, true)
 }
 
 func (m *RemindModule) handleDelete(responder Responder, i *discordgo.InteractionCreate) {
@@ -171,7 +230,13 @@ func (m *RemindModule) handleDelete(responder Responder, i *discordgo.Interactio
 		responder.Respond(i, "Reminder not found.", true)
 		return
 	}
-	responder.Respond(i, "Deleted.", true)
+	responder.RespondEmbed(i, &discordgo.MessageEmbed{
+		Title: "Reminder Deleted",
+		Color: reminderEmbedColor,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "ID", Value: fmt.Sprintf("%d", id), Inline: true},
+		},
+	}, true)
 }
 
 func userIDFromInteraction(i *discordgo.InteractionCreate) string {
@@ -182,4 +247,18 @@ func userIDFromInteraction(i *discordgo.InteractionCreate) string {
 		return i.User.ID
 	}
 	return ""
+}
+
+func formatReminderListEntry(r reminders.Reminder) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Next: %s", formatReminderTime(r.NextRun))
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "Channel: %s", renderChannelOrFallback(r.ChannelID, "Unknown"))
+	b.WriteString("\n")
+	fmt.Fprintf(&b, "Message: %s", trimForField(r.Message, 220))
+	return b.String()
+}
+
+func formatReminderTime(t time.Time) string {
+	return fmt.Sprintf("<t:%d:F> (<t:%d:R>)", t.UTC().Unix(), t.UTC().Unix())
 }

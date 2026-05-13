@@ -32,9 +32,11 @@ When `BOT_ENV=test` and `TEST_GUILD_ID` are set, the `/remind` slash command is 
 
 ### Slash Commands
 
-- `/remind add message:<text> schedule:(once|hourly|daily) at:<RFC3339|HH:MM>`
+- `/remind add message:<text> schedule:(once|hourly|daily) at:<10m|2h|3d|RFC3339|HH:MM|:MM>`
 - `/remind list`
 - `/remind delete id:<number>`
+
+For one-time reminders, `at` accepts relative durations like `10m`, `2h`, or `3d`. Daily reminders use `HH:MM` UTC, and hourly reminders can use `:MM` for a specific minute each hour.
 
 ### Tests
 
@@ -56,5 +58,3 @@ Includes unit tests for scheduler, store, and config using in-memory SQLite. No 
   go run ./cmd/migrate -dsn ./reminders.db -dir ./db/migrations -action status
   ```
 The bot automatically runs `goose up` on start using `./db/migrations`.
-
-
