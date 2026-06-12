@@ -4,6 +4,23 @@
 
 package data
 
+type PageMonitor struct {
+	ID            int64   `json:"id"`
+	UserID        string  `json:"user_id"`
+	ChannelID     string  `json:"channel_id"`
+	GuildID       *string `json:"guild_id"`
+	Url           string  `json:"url"`
+	Label         string  `json:"label"`
+	LastStatus    string  `json:"last_status"`
+	CheckInterval int64   `json:"check_interval"`
+	NextCheck     int64   `json:"next_check"`
+	CreatedAt     int64   `json:"created_at"`
+	UpdatedAt     int64   `json:"updated_at"`
+	ContentHash   string  `json:"content_hash"`
+	LastContent   string  `json:"last_content"`
+	Selector      string  `json:"selector"`
+}
+
 type ProcessedRssEntry struct {
 	Guid        string `json:"guid"`
 	Title       string `json:"title"`

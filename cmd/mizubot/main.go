@@ -13,6 +13,7 @@ import (
 	"mizubot-go/internal/bot"
 	"mizubot-go/internal/config"
 	"mizubot-go/internal/db"
+	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 	"mizubot-go/internal/scheduler"
 )
@@ -65,7 +66,10 @@ func main() {
 
 	animeService := animefeed.NewService(database, publisher, cfg.AnimeFeedURL)
 
-	discordBot, err := bot.New(cfg.DiscordToken, store, animeService)
+	monitorStore := pagemonitor.NewStore(database)
+	monitorService := pagemonitor.NewService(monitorStore)
+
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}
@@ -93,6 +97,9 @@ func main() {
 
 	animePoller := animefeed.NewPoller(animeService, discordBot, cfg.AnimePollInterval)
 	animePoller.Start(ctx)
+
+	monitorPoller := pagemonitor.NewPoller(monitorService, discordBot, cfg.TickInterval)
+	monitorPoller.Start(ctx)
 
 	log.Printf("MizuBot is running. Reminder tick: %s. Anime poll: %s", cfg.TickInterval.String(), cfg.AnimePollInterval.String())
 

@@ -7,6 +7,7 @@ import (
 
 	"mizubot-go/internal/animefeed"
 	"mizubot-go/internal/bot/commands"
+	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 
 	"github.com/bwmarrin/discordgo"
@@ -32,7 +33,7 @@ type Bot struct {
 	dryRun    bool
 }
 
-func New(token string, store *reminders.Store, animeService *animefeed.Service) (*Bot, error) {
+func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service) (*Bot, error) {
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
@@ -44,6 +45,9 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service) 
 	}
 	if animeService != nil {
 		modules = append(modules, commands.NewAnimeModule(animeService))
+	}
+	if monitorService != nil {
+		modules = append(modules, commands.NewMonitorModule(monitorService))
 	}
 	b := &Bot{
 		session:   s,
@@ -112,6 +116,43 @@ func (b *Bot) SendAnimeNotification(channelID string, embed animefeed.AnimeNotif
 		},
 	})
 	return err
+}
+
+func (b *Bot) SendPageMonitorNotification(channelID string, m pagemonitor.Monitor, oldContent, newContent string) error {
+	if b.dryRun {
+		return nil
+	}
+	embed := &discordgo.MessageEmbed{
+		Title: fmt.Sprintf("Page changed: %s", m.Label),
+		URL:   m.URL,
+		Color: 0xF39C12,
+		Fields: []*discordgo.MessageEmbedField{
+			{Name: "Before", Value: truncate(oldContent, 300), Inline: false},
+			{Name: "After", Value: truncate(newContent, 300), Inline: false},
+			{Name: "URL", Value: m.URL, Inline: false},
+		},
+		Footer: &discordgo.MessageEmbedFooter{Text: "Page Monitor"},
+	}
+	userMention := "<@" + m.UserID + ">"
+	_, err := b.session.ChannelMessageSendComplex(channelID, &discordgo.MessageSend{
+		Content: userMention,
+		Embeds:  []*discordgo.MessageEmbed{embed},
+		AllowedMentions: &discordgo.MessageAllowedMentions{
+			Users: []string{m.UserID},
+		},
+	})
+	return err
+}
+
+func truncate(s string, max int) string {
+	if s == "" {
+		return "(empty)"
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
 }
 
 func (b *Bot) RegisterCommandsGlobal() error {
