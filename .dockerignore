@@ -1,0 +1,37 @@
+.git
+.gitignore
+.dockerignore
+
+# Local configuration and secrets
+config.yaml
+config.local.yaml
+config.prod.yaml
+config.test.yaml
+*.local.yaml
+.env
+.env.*.local
+prod/config.yml
+
+# Runtime data
+prod/data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# Build and editor output
+bin
+build
+dist
+release
+tmp
+*.test
+*.out
+coverage.*
+cover.out
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+*.log
+logs

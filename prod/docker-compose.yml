@@ -1,0 +1,12 @@
+name: mizubot-prod
+
+services:
+  mizubot:
+    build:
+      context: ..
+    command: ["-config", "/config.yml"]
+    volumes:
+      - ./config.yml:/config.yml:ro
+      - ./data:/data
+    environment:
+      DATABASE_PATH: "/data/mizubot.db"
