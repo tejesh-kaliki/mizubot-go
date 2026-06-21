@@ -20,6 +20,10 @@ aws:
   s3_access_key: "key"
   s3_secret_key: "secret"
   s3_region: "us-east-1"
+ollama:
+  base_url: "http://ollama.local:11434"
+  model: "mistral"
+  timeout: "5s"
 env: "test"
 test_guild_id: "G"
 dry_run: false
@@ -34,6 +38,7 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 
 	t.Setenv("DISCORD_TOKEN_TEST", "Bot B")
 	t.Setenv("DRY_RUN", "1")
+	t.Setenv("OLLAMA_MODEL", "llama3.2")
 
 	cfg, err := LoadFromFile(p)
 	if err != nil {
@@ -65,5 +70,14 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 	}
 	if !cfg.DryRun {
 		t.Fatalf("dry_run override failed")
+	}
+	if cfg.OllamaBaseURL != "http://ollama.local:11434" {
+		t.Fatalf("ollama base url: %s", cfg.OllamaBaseURL)
+	}
+	if cfg.OllamaModel != "llama3.2" {
+		t.Fatalf("ollama model override failed: %s", cfg.OllamaModel)
+	}
+	if cfg.OllamaTimeout.String() != "5s" {
+		t.Fatalf("ollama timeout: %s", cfg.OllamaTimeout)
 	}
 }

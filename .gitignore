@@ -45,3 +45,7 @@ config.test.yaml
 # Cursor workspace metadata
 .cursor/
 
+# Production data
+prod/config.yml
+prod/data
+

@@ -1,12 +1,16 @@
 package bot
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"strings"
+	"sync"
 	"time"
 
 	"mizubot-go/internal/animefeed"
 	"mizubot-go/internal/bot/commands"
+	"mizubot-go/internal/llm"
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 
@@ -31,9 +35,10 @@ type Bot struct {
 	registrar CommandRegistrar
 	modules   []commands.Module
 	dryRun    bool
+	llm       *llm.Service
 }
 
-func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service) (*Bot, error) {
+func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service) (*Bot, error) {
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
@@ -53,6 +58,7 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 		session:   s,
 		registrar: discordRegistrar{s: s},
 		modules:   modules,
+		llm:       llmService,
 	}
 	s.AddHandler(b.onInteractionCreate)
 	s.AddHandler(b.onMessageCreate)
@@ -209,7 +215,80 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	if b.dryRun {
 		return
 	}
-	_, _ = s.ChannelMessageSendReply(m.ChannelID, "Hello", m.Reference())
+
+	response := "Hello"
+	if b.llm != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		stopTyping := b.startTyping(ctx, s, m.ChannelID)
+
+		log.Printf("generating llm response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
+		generated, err := b.llm.GenerateResponse(ctx, llm.Message{
+			UserID:    m.Author.ID,
+			Username:  m.Author.Username,
+			ChannelID: m.ChannelID,
+			Content:   stripUserMention(m.Content, s.State.User.ID),
+		})
+		if err != nil {
+			log.Printf("llm response generation failed: channel_id=%s user_id=%s message_id=%s error=%v", m.ChannelID, m.Author.ID, m.ID, err)
+			response = "I couldn't generate a response right now."
+		} else if generated != "" {
+			response = generated
+		} else {
+			log.Printf("llm returned empty response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
+		}
+		cancel()
+		stopTyping()
+	} else {
+		log.Printf("llm service not configured; using fallback response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
+	}
+	responses := splitDiscordMessages(response)
+	for idx, part := range responses {
+		var err error
+		if idx == 0 {
+			_, err = s.ChannelMessageSendReply(m.ChannelID, part, m.Reference())
+		} else {
+			_, err = s.ChannelMessageSend(m.ChannelID, part)
+		}
+		if err != nil {
+			log.Printf("discord reply send failed: channel_id=%s user_id=%s message_id=%s part=%d total_parts=%d error=%v", m.ChannelID, m.Author.ID, m.ID, idx+1, len(responses), err)
+			return
+		}
+	}
+}
+
+func (b *Bot) startTyping(ctx context.Context, s *discordgo.Session, channelID string) func() {
+	if s == nil || channelID == "" {
+		return func() {}
+	}
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	if err := s.ChannelTyping(channelID); err != nil {
+		log.Printf("discord typing indicator error: %v", err)
+	}
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := s.ChannelTyping(channelID); err != nil {
+					log.Printf("discord typing indicator refresh error: %v", err)
+				}
+			case <-ctx.Done():
+				return
+			case <-done:
+				return
+			}
+		}
+	}()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			close(done)
+		})
+		<-stopped
+	}
 }
 
 func (b *Bot) Respond(i *discordgo.InteractionCreate, content string, ephemeral bool) {
@@ -239,4 +318,59 @@ func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.Mess
 
 func messageMentionsUser(content, userID string) bool {
 	return strings.Contains(content, "<@"+userID+">") || strings.Contains(content, "<@!"+userID+">")
+}
+
+func stripUserMention(content, userID string) string {
+	content = strings.ReplaceAll(content, "<@"+userID+">", "")
+	content = strings.ReplaceAll(content, "<@!"+userID+">", "")
+	return strings.TrimSpace(content)
+}
+
+func splitDiscordMessages(content string) []string {
+	const maxDiscordMessageLength = 2000
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return []string{"Hello"}
+	}
+
+	var parts []string
+	remaining := content
+	for len([]rune(remaining)) > maxDiscordMessageLength {
+		chunk, rest := splitDiscordMessageChunk(remaining, maxDiscordMessageLength)
+		parts = append(parts, chunk)
+		remaining = strings.TrimSpace(rest)
+	}
+	parts = append(parts, remaining)
+	return parts
+}
+
+func splitDiscordMessageChunk(content string, maxRunes int) (string, string) {
+	runes := []rune(content)
+	if len(runes) <= maxRunes {
+		return strings.TrimSpace(content), ""
+	}
+
+	window := string(runes[:maxRunes])
+	breakAt := lastBreakIndex(window, "\n\n")
+	if breakAt < maxRunes/2 {
+		breakAt = lastBreakIndex(window, "\n")
+	}
+	if breakAt < maxRunes/2 {
+		breakAt = lastBreakIndex(window, " ")
+	}
+	if breakAt < maxRunes/2 {
+		breakAt = maxRunes
+	}
+
+	chunk := strings.TrimSpace(string(runes[:breakAt]))
+	rest := strings.TrimSpace(string(runes[breakAt:]))
+	return chunk, rest
+}
+
+func lastBreakIndex(content, sep string) int {
+	byteIdx := strings.LastIndex(content, sep)
+	if byteIdx < 0 {
+		return -1
+	}
+	return len([]rune(content[:byteIdx+len(sep)]))
 }

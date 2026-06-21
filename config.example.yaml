@@ -12,6 +12,10 @@ aws:
   s3_access_key: "AKIA..."
   s3_secret_key: "secret"
   s3_region: "ap-south-1"
+ollama:
+  base_url: "http://localhost:11434"
+  model: "llama3.2"
+  timeout: "60s"
 
 # Optional
 env: "test"            # or "prod"

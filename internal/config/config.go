@@ -25,17 +25,21 @@ type Config struct {
 	Env                    string // "prod" or "test"
 	TestGuildID            string
 	DryRun                 bool
+	OllamaBaseURL          string
+	OllamaModel            string
+	OllamaTimeout          time.Duration
 }
 
 type fileConfig struct {
-	DiscordToken string          `yaml:"discord_token"`
-	DatabasePath string          `yaml:"database_path"`
-	TickInterval string          `yaml:"tick_interval"`
-	Anime        animeFileConfig `yaml:"anime"`
-	AWS          awsFileConfig   `yaml:"aws"`
-	Env          string          `yaml:"env"`
-	TestGuildID  string          `yaml:"test_guild_id"`
-	DryRun       bool            `yaml:"dry_run"`
+	DiscordToken string           `yaml:"discord_token"`
+	DatabasePath string           `yaml:"database_path"`
+	TickInterval string           `yaml:"tick_interval"`
+	Anime        animeFileConfig  `yaml:"anime"`
+	AWS          awsFileConfig    `yaml:"aws"`
+	Env          string           `yaml:"env"`
+	TestGuildID  string           `yaml:"test_guild_id"`
+	DryRun       bool             `yaml:"dry_run"`
+	Ollama       ollamaFileConfig `yaml:"ollama"`
 }
 
 type animeFileConfig struct {
@@ -50,6 +54,12 @@ type awsFileConfig struct {
 	S3AccessKey string `yaml:"s3_access_key"`
 	S3SecretKey string `yaml:"s3_secret_key"`
 	S3Region    string `yaml:"s3_region"`
+}
+
+type ollamaFileConfig struct {
+	BaseURL string `yaml:"base_url"`
+	Model   string `yaml:"model"`
+	Timeout string `yaml:"timeout"`
 }
 
 // Load keeps env-only behavior for backward compatibility
@@ -93,6 +103,9 @@ type envVals struct {
 	S3Prefix               string
 	DryRun                 string
 	TestGuildID            string
+	OllamaBaseURL          string
+	OllamaModel            string
+	OllamaTimeout          string
 }
 
 func osEnv() envVals {
@@ -112,6 +125,9 @@ func osEnv() envVals {
 		S3Prefix:               os.Getenv("S3_PREFIX"),
 		DryRun:                 os.Getenv("DRY_RUN"),
 		TestGuildID:            os.Getenv("TEST_GUILD_ID"),
+		OllamaBaseURL:          os.Getenv("OLLAMA_BASE_URL"),
+		OllamaModel:            os.Getenv("OLLAMA_MODEL"),
+		OllamaTimeout:          os.Getenv("OLLAMA_TIMEOUT"),
 	}
 }
 
@@ -148,6 +164,12 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		dry = true
 	}
 
+	ollamaTimeoutStr := fallback(e.OllamaTimeout, f.Ollama.Timeout, "60s")
+	ollamaTimeout := time.Minute
+	if d, err := time.ParseDuration(ollamaTimeoutStr); err == nil {
+		ollamaTimeout = d
+	}
+
 	testGuild := fallback(e.TestGuildID, f.TestGuildID, "")
 
 	return Config{
@@ -165,6 +187,9 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		Env:                    env,
 		DryRun:                 dry,
 		TestGuildID:            testGuild,
+		OllamaBaseURL:          fallback(e.OllamaBaseURL, f.Ollama.BaseURL, "http://localhost:11434"),
+		OllamaModel:            fallback(e.OllamaModel, f.Ollama.Model, "llama3.2"),
+		OllamaTimeout:          ollamaTimeout,
 	}, nil
 }
 

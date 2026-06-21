@@ -5,6 +5,7 @@ High-level architecture and how reminders work.
 ### Components
 
 - **Discord bot** (`internal/bot`): Handles slash commands, creates/deletes/lists reminders, and sends messages. Uses `github.com/bwmarrin/discordgo`.
+- **LLM** (`internal/llm`): Generates a reply through Ollama when the Discord bot is mentioned.
 - **Scheduler** (`internal/scheduler`): Periodically queries the DB for due reminders and triggers sends; reschedules or deletes as needed.
 - **Persistence** (`internal/reminders`, `internal/db`): SQLite storage for reminders and migrations via `goose`.
 - **Config** (`internal/config`): YAML config with environment variable overrides; `-config` flag supported.

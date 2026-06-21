@@ -4,6 +4,7 @@ services:
   mizubot:
     build:
       context: ..
+    container_name: mizubot
     command: ["-config", "/config.yml"]
     volumes:
       - ./config.yml:/config.yml:ro

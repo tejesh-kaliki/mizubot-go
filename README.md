@@ -22,6 +22,9 @@ YAML example: see `config.example.yaml`.
   export DISCORD_TOKEN='Bot <token>'
   export DATABASE_PATH=./reminders.db
   export TICK_INTERVAL=10s
+  export OLLAMA_BASE_URL=http://localhost:11434
+  export OLLAMA_MODEL=llama3.2
+  export OLLAMA_TIMEOUT=60s
   export BOT_ENV=test
   export TEST_GUILD_ID='<guild_id>'
   export DRY_RUN=1
@@ -29,6 +32,8 @@ YAML example: see `config.example.yaml`.
   ```
 
 When `BOT_ENV=test` and `TEST_GUILD_ID` are set, the `/remind` slash command is registered only in that guild for fast propagation.
+
+When the bot is mentioned in Discord, it sends the current message to the configured Ollama model and replies to that message.
 
 ### Slash Commands
 

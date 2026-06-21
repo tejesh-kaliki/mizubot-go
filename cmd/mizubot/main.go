@@ -13,6 +13,7 @@ import (
 	"mizubot-go/internal/bot"
 	"mizubot-go/internal/config"
 	"mizubot-go/internal/db"
+	"mizubot-go/internal/llm"
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 	"mizubot-go/internal/scheduler"
@@ -69,7 +70,13 @@ func main() {
 	monitorStore := pagemonitor.NewStore(database)
 	monitorService := pagemonitor.NewService(monitorStore)
 
-	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService)
+	llmService := llm.NewService(llm.NewOllamaClient(llm.OllamaConfig{
+		BaseURL: cfg.OllamaBaseURL,
+		Model:   cfg.OllamaModel,
+		Timeout: cfg.OllamaTimeout,
+	}))
+
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}
