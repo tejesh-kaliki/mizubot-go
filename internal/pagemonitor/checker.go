@@ -5,10 +5,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
@@ -36,6 +36,18 @@ var skipTags = map[string]bool{
 	"head": true, "nav": true, "footer": true, "iframe": true,
 }
 
+// blockTags are visible element boundaries worth preserving in extracted text.
+var blockTags = map[string]bool{
+	"address": true, "article": true, "aside": true, "blockquote": true,
+	"br": true, "caption": true, "dd": true, "details": true, "div": true,
+	"dl": true, "dt": true, "fieldset": true, "figcaption": true, "figure": true,
+	"form": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true,
+	"h6": true, "header": true, "hr": true, "li": true, "main": true,
+	"ol": true, "p": true, "pre": true, "section": true, "summary": true,
+	"table": true, "tbody": true, "td": true, "tfoot": true, "th": true,
+	"thead": true, "tr": true, "ul": true,
+}
+
 func CheckURL(ctx context.Context, rawURL, selector string) (CheckResult, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -49,7 +61,11 @@ func CheckURL(ctx context.Context, rawURL, selector string) (CheckResult, error)
 	if err != nil {
 		return CheckResult{}, err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Println("Error closing body:", err)
+		}
+	}()
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
 	if err != nil {
@@ -61,17 +77,25 @@ func CheckURL(ctx context.Context, rawURL, selector string) (CheckResult, error)
 		return CheckResult{}, err
 	}
 
+	selectors := make([]string, 0)
+	for s := range strings.SplitSeq(selector, ",") {
+		trimmed := strings.TrimSpace(s)
+		if trimmed != "" {
+			selectors = append(selectors, trimmed)
+		}
+	}
+	if len(selectors) == 0 && isAmazon(rawURL) {
+		selectors = amazonFallbackSelectors
+	}
+
 	var content string
-	switch {
-	case selector != "":
-		content = extractBySelector(doc, selector)
-	case isAmazon(rawURL):
-		content = extractBySelectors(doc, amazonFallbackSelectors)
+	if len(selectors) > 0 {
+		content = extractBySelectors(doc, selectors)
 	}
 	if content == "" {
 		content = extractVisibleText(doc)
 	}
-	content = normalizeWhitespace(content)
+	content = normalizeExtractedText(content)
 
 	sum := sha256.Sum256([]byte(content))
 	return CheckResult{
@@ -94,10 +118,10 @@ func extractBySelector(doc *html.Node, sel string) string {
 	for _, node := range cascadia.QueryAll(doc, compiled) {
 		text := extractVisibleText(node)
 		if text != "" {
-			fmt.Fprintf(&sb, "%s\n", text)
+			fmt.Fprintf(&sb, "%s\n\n", text)
 		}
 	}
-	return sb.String()
+	return strings.TrimSpace(sb.String())
 }
 
 // extractBySelectors tries each selector and concatenates non-empty results.
@@ -106,31 +130,80 @@ func extractBySelectors(doc *html.Node, selectors []string) string {
 	for _, sel := range selectors {
 		text := extractBySelector(doc, sel)
 		if text != "" {
-			fmt.Fprintf(&sb, "[%s] %s\n", sel, text)
+			fmt.Fprintf(&sb, "[%s]\n%s\n\n", sel, text)
 		}
 	}
-	return sb.String()
+	return strings.TrimSpace(sb.String())
 }
 
 func extractVisibleText(n *html.Node) string {
-	var sb strings.Builder
+	var lines []string
+	var line strings.Builder
+
+	flushLine := func() {
+		text := strings.Join(strings.Fields(line.String()), " ")
+		line.Reset()
+		if text == "" {
+			return
+		}
+		lines = append(lines, text)
+	}
+	writeText := func(text string) {
+		text = strings.Join(strings.Fields(text), " ")
+		if text == "" {
+			return
+		}
+		if line.Len() > 0 {
+			line.WriteRune(' ')
+		}
+		line.WriteString(text)
+	}
+
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && skipTags[n.Data] {
 			return
 		}
+		if n.Type == html.ElementNode && n.Data == "br" {
+			flushLine()
+			return
+		}
+		if n.Type == html.ElementNode && blockTags[n.Data] && line.Len() > 0 {
+			flushLine()
+		}
 		if n.Type == html.TextNode {
-			sb.WriteString(n.Data)
-			sb.WriteRune(' ')
+			writeText(n.Data)
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
 		}
+		if n.Type == html.ElementNode && blockTags[n.Data] {
+			flushLine()
+		}
 	}
 	walk(n)
-	return sb.String()
+	flushLine()
+	return strings.Join(lines, "\n")
 }
 
-func normalizeWhitespace(s string) string {
-	return strings.Join(strings.FieldsFunc(s, unicode.IsSpace), " ")
+func normalizeExtractedText(s string) string {
+	lines := strings.Split(s, "\n")
+	normalized := make([]string, 0, len(lines))
+	previousBlank := false
+	for _, line := range lines {
+		line = strings.Join(strings.Fields(line), " ")
+		if line == "" {
+			if len(normalized) > 0 && !previousBlank {
+				normalized = append(normalized, "")
+				previousBlank = true
+			}
+			continue
+		}
+		normalized = append(normalized, line)
+		previousBlank = false
+	}
+	for len(normalized) > 0 && normalized[len(normalized)-1] == "" {
+		normalized = normalized[:len(normalized)-1]
+	}
+	return strings.Join(normalized, "\n")
 }
