@@ -226,6 +226,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			UserID:    m.Author.ID,
 			Username:  m.Author.Username,
 			ChannelID: m.ChannelID,
+			GuildID:   m.GuildID,
 			Content:   stripUserMention(m.Content, s.State.User.ID),
 		})
 		if err != nil {
