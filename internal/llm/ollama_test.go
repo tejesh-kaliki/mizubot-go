@@ -20,7 +20,7 @@ func TestOllamaClientGenerateResponse(t *testing.T) {
 			t.Fatalf("decode request: %v", err)
 		}
 		var body bytes.Buffer
-		_ = json.NewEncoder(&body).Encode(ollamaGenerateResponse{Response: " hi there "})
+		_ = json.NewEncoder(&body).Encode(ollamaGenerateResponse{Response: " hi there ", PromptEvalCount: 7, EvalCount: 3})
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Status:     "200 OK",
@@ -43,6 +43,13 @@ func TestOllamaClientGenerateResponse(t *testing.T) {
 	}
 	if resp != "hi there" {
 		t.Fatalf("response = %q, want %q", resp, "hi there")
+	}
+	metricsResp, err := client.CompleteWithMetrics(context.Background(), CompletionRequest{SystemPrompt: "system", UserPrompt: "hello"})
+	if err != nil {
+		t.Fatalf("CompleteWithMetrics: %v", err)
+	}
+	if metricsResp.Usage.PromptTokens != 7 || metricsResp.Usage.CompletionTokens != 3 {
+		t.Fatalf("usage = %+v, want prompt=7 completion=3", metricsResp.Usage)
 	}
 	if got.Model != "test-model" {
 		t.Fatalf("model = %q, want test-model", got.Model)
@@ -75,6 +82,8 @@ func TestOllamaClientChatWithTools(t *testing.T) {
 					{Function: ollamaToolCallFunction{Name: "reminder_list_active", Arguments: json.RawMessage(`{}`)}},
 				},
 			},
+			PromptEvalCount: 11,
+			EvalCount:       2,
 		})
 		return &http.Response{
 			StatusCode: http.StatusOK,
@@ -110,6 +119,9 @@ func TestOllamaClientChatWithTools(t *testing.T) {
 	}
 	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "reminder_list_active" {
 		t.Fatalf("tool calls mismatch: %#v", resp.ToolCalls)
+	}
+	if resp.Usage.PromptTokens != 11 || resp.Usage.CompletionTokens != 2 {
+		t.Fatalf("usage = %+v, want prompt=11 completion=2", resp.Usage)
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"mizubot-go/internal/guildinstructions"
 	"mizubot-go/internal/llm"
 	llmtools "mizubot-go/internal/llm/tools"
+	"mizubot-go/internal/llmstats"
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 	"mizubot-go/internal/scheduler"
@@ -79,17 +80,16 @@ func main() {
 
 	monitorStore := pagemonitor.NewStore(database)
 	monitorService := pagemonitor.NewService(monitorStore)
+	llmStatsStore := llmstats.NewStore(database)
 
+	allTools := append(llmtools.NewReminderTools(reminderService, userSettingsService), llmtools.NewUserSettingsTools(userSettingsService)...)
 	llmService := llm.NewServiceWithGuildInstructionProvider(llm.NewOllamaClient(llm.OllamaConfig{
 		BaseURL: cfg.OllamaBaseURL,
 		Model:   cfg.OllamaModel,
 		Timeout: cfg.OllamaTimeout,
-	}), guildInstructionStore, append(
-		llmtools.NewReminderTools(reminderService, userSettingsService),
-		llmtools.NewUserSettingsTools(userSettingsService)...,
-	)...)
+	}), guildInstructionStore, allTools...)
 
-	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService)
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}

@@ -12,6 +12,8 @@ import (
 	"mizubot-go/internal/usersettings"
 )
 
+var reminderToolKeywords = []string{"remind", "reminder", "reminders", "notify", "notification", "alarm", "schedule"}
+
 func NewReminderTools(service *reminders.Service, settingsService ...*usersettings.Service) []llm.Tool {
 	if service == nil {
 		return nil
@@ -25,18 +27,21 @@ func NewReminderTools(service *reminders.Service, settingsService ...*usersettin
 			Name:        "reminder_list_active",
 			Description: "Load the current Discord user's active reminders.",
 			Parameters:  json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
+			Keywords:    reminderToolKeywords,
 			Execute:     listReminders(service),
 		},
 		{
 			Name:        "reminder_create",
 			Description: "Create a reminder for the current Discord user. Infer a concise reminder message from the user's request unless they explicitly provide exact reminder text. LLM callers must provide normalized scheduling: cron_expr for repeated reminders, or once=true plus run_at for one-time reminders.",
 			Parameters:  json.RawMessage(`{"type":"object","required":["message","once"],"properties":{"message":{"type":"string","description":"Concise reminder text to send later. Infer the actual thing to remember, not the full user command. For example, 'remind me to take meds tomorrow' should use 'take meds'. If the user quotes or explicitly states exact reminder text, preserve it."},"once":{"type":"boolean","description":"true for a one-time reminder; false for a repeated reminder."},"run_at":{"type":"string","description":"Required when once=true. Use a duration like 10m, 2h, 3d, RFC3339, or YYYY-MM-DD HH:MM in the selected timezone."},"cron_expr":{"type":"string","description":"Required when once=false. Five-field cron expression in the selected timezone."},"timezone":{"type":"string","description":"Optional IANA timezone name. Defaults to the user's configured timezone, then UTC."},"channel_id":{"type":"string","description":"Discord channel ID. Optional; defaults to the current channel."}},"additionalProperties":false}`),
+			Keywords:    reminderToolKeywords,
 			Execute:     createReminder(service, settings),
 		},
 		{
 			Name:        "reminder_delete",
 			Description: "Delete one of the current Discord user's reminders by ID.",
 			Parameters:  json.RawMessage(`{"type":"object","required":["id"],"properties":{"id":{"type":"integer","description":"Reminder ID to delete."}},"additionalProperties":false}`),
+			Keywords:    reminderToolKeywords,
 			Execute:     deleteReminder(service),
 		},
 	}

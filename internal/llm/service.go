@@ -17,6 +17,8 @@ type Message struct {
 	ChannelID string
 	GuildID   string
 	Content   string
+	Timezone  string
+	Now       time.Time
 }
 
 type CompletionRequest struct {
@@ -24,8 +26,26 @@ type CompletionRequest struct {
 	UserPrompt   string
 }
 
+type Usage struct {
+	PromptTokens     int64
+	CompletionTokens int64
+}
+
+func (u Usage) TotalTokens() int64 {
+	return u.PromptTokens + u.CompletionTokens
+}
+
+type CompletionResponse struct {
+	Content string
+	Usage   Usage
+}
+
 type Completer interface {
 	Complete(ctx context.Context, request CompletionRequest) (string, error)
+}
+
+type MetricsCompleter interface {
+	CompleteWithMetrics(ctx context.Context, request CompletionRequest) (CompletionResponse, error)
 }
 
 type ChatCompleter interface {
@@ -58,6 +78,7 @@ type ChatToolCall struct {
 type ChatResponse struct {
 	Content   string
 	ToolCalls []ChatToolCall
+	Usage     Usage
 }
 
 type ToolContext struct {
@@ -77,6 +98,7 @@ type Tool struct {
 	Name        string
 	Description string
 	Parameters  json.RawMessage
+	Keywords    []string
 	Execute     ToolHandler
 }
 
@@ -88,6 +110,13 @@ type Service struct {
 	completer                Completer
 	tools                    map[string]Tool
 	guildInstructionProvider GuildInstructionProvider
+}
+
+type Response struct {
+	Content   string
+	Usage     Usage
+	LLMTurns  int64
+	ToolCalls int64
 }
 
 func NewService(completer Completer, tools ...Tool) *Service {
@@ -114,24 +143,35 @@ func NewServiceWithGuildInstructionProvider(completer Completer, guildInstructio
 }
 
 func (s *Service) GenerateResponse(ctx context.Context, message Message) (string, error) {
+	response, err := s.GenerateResponseWithMetrics(ctx, message)
+	return response.Content, err
+}
+
+func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Message) (Response, error) {
 	if s == nil || s.completer == nil {
-		return "", nil
+		return Response{}, nil
 	}
 	message.Content = strings.TrimSpace(message.Content)
 	if message.Content == "" {
-		return "", nil
+		return Response{}, nil
 	}
-	if len(s.tools) == 0 {
+	tools := s.toolsForMessage(message)
+	if len(tools) == 0 {
 		systemPrompt, err := s.buildSystemPrompt(ctx, message)
 		if err != nil {
-			return "", err
+			return Response{}, err
 		}
-		return s.completer.Complete(ctx, CompletionRequest{
+		result, err := completeWithMetrics(ctx, s.completer, CompletionRequest{
 			SystemPrompt: systemPrompt,
 			UserPrompt:   buildUserPrompt(message),
 		})
+		if err != nil {
+			return Response{}, err
+		}
+		result.LLMTurns = 1
+		return result, nil
 	}
-	return s.generateWithTools(ctx, message)
+	return s.generateWithTools(ctx, message, tools)
 }
 
 type toolDecision struct {
@@ -150,29 +190,31 @@ type toolExecutionResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
-func (s *Service) generateWithTools(ctx context.Context, message Message) (string, error) {
+func (s *Service) generateWithTools(ctx context.Context, message Message, tools map[string]Tool) (Response, error) {
 	if chatCompleter, ok := s.completer.(ChatCompleter); ok {
-		return s.generateWithNativeTools(ctx, chatCompleter, message)
+		return s.generateWithNativeTools(ctx, chatCompleter, message, tools)
 	}
 
-	systemPrompt, err := s.buildToolSystemPrompt(ctx, message)
+	systemPrompt, err := s.buildToolSystemPrompt(ctx, message, tools)
 	if err != nil {
-		return "", err
+		return Response{}, err
 	}
-	decisionText, err := s.completer.Complete(ctx, CompletionRequest{
+	decisionResponse, err := completeWithMetrics(ctx, s.completer, CompletionRequest{
 		SystemPrompt: systemPrompt,
 		UserPrompt:   buildToolDecisionPrompt(message),
 	})
 	if err != nil {
-		return "", err
+		return Response{}, err
 	}
+	decisionResponse.LLMTurns = 1
+	usage := decisionResponse.Usage
 
-	decision, ok := parseToolDecision(decisionText)
+	decision, ok := parseToolDecision(decisionResponse.Content)
 	if !ok {
-		return strings.TrimSpace(decisionText), nil
+		return Response{Content: strings.TrimSpace(decisionResponse.Content), Usage: usage, LLMTurns: decisionResponse.LLMTurns}, nil
 	}
 	if len(decision.ToolCalls) == 0 {
-		return strings.TrimSpace(decision.FinalResponse), nil
+		return Response{Content: strings.TrimSpace(decision.FinalResponse), Usage: usage, LLMTurns: decisionResponse.LLMTurns}, nil
 	}
 
 	toolCtx := ToolContext{
@@ -182,8 +224,9 @@ func (s *Service) generateWithTools(ctx context.Context, message Message) (strin
 		GuildID:   message.GuildID,
 	}
 	results := make([]toolExecutionResult, 0, len(decision.ToolCalls))
+	toolCalls := int64(len(decision.ToolCalls))
 	for _, call := range decision.ToolCalls {
-		tool, ok := s.tools[call.Name]
+		tool, ok := tools[call.Name]
 		if !ok {
 			results = append(results, toolExecutionResult{Name: call.Name, Error: "unknown tool"})
 			continue
@@ -199,28 +242,38 @@ func (s *Service) generateWithTools(ctx context.Context, message Message) (strin
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("marshal tool results: %w", err)
+		return Response{}, fmt.Errorf("marshal tool results: %w", err)
 	}
 	systemPrompt, err = s.buildSystemPrompt(ctx, message)
 	if err != nil {
-		return "", err
+		return Response{}, err
 	}
-	return s.completer.Complete(ctx, CompletionRequest{
+	finalResponse, err := completeWithMetrics(ctx, s.completer, CompletionRequest{
 		SystemPrompt: systemPrompt,
 		UserPrompt:   buildToolResultPrompt(message, string(resultJSON)),
 	})
+	if err != nil {
+		return Response{}, err
+	}
+	finalResponse.Usage = addUsage(usage, finalResponse.Usage)
+	finalResponse.LLMTurns = decisionResponse.LLMTurns + 1
+	finalResponse.ToolCalls = toolCalls
+	return finalResponse, nil
 }
 
-func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message) (string, error) {
-	tools := chatTools(s.tools)
+func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message, tools map[string]Tool) (Response, error) {
+	selectedChatTools := chatTools(tools)
 	systemPrompt, err := s.buildSystemPrompt(ctx, message)
 	if err != nil {
-		return "", err
+		return Response{}, err
 	}
 	messages := []ChatMessage{
 		{Role: "system", Content: systemPrompt + "\n\n" + buildToolResponseStylePrompt()},
 		{Role: "user", Content: buildUserPrompt(message)},
 	}
+	usage := Usage{}
+	var llmTurns int64
+	var toolCalls int64
 
 	toolCtx := ToolContext{
 		UserID:    message.UserID,
@@ -229,13 +282,16 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 		GuildID:   message.GuildID,
 	}
 	for range maxToolIterations {
-		response, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages, Tools: tools})
+		response, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages, Tools: selectedChatTools})
 		if err != nil {
-			return "", err
+			return Response{}, err
 		}
+		llmTurns++
+		usage = addUsage(usage, response.Usage)
 		if len(response.ToolCalls) == 0 {
-			return strings.TrimSpace(response.Content), nil
+			return Response{Content: strings.TrimSpace(response.Content), Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 		}
+		toolCalls += int64(len(response.ToolCalls))
 
 		messages = append(messages, ChatMessage{
 			Role:      "assistant",
@@ -243,7 +299,7 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 			ToolCalls: response.ToolCalls,
 		})
 		for _, call := range response.ToolCalls {
-			result := executeToolCall(ctx, s.tools, toolCtx, call)
+			result := executeToolCall(ctx, tools, toolCtx, call)
 			messages = append(messages, ChatMessage{
 				Role:     "tool",
 				ToolName: call.Name,
@@ -258,9 +314,11 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	})
 	final, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages})
 	if err != nil {
-		return "", err
+		return Response{}, err
 	}
-	return strings.TrimSpace(final.Content), nil
+	llmTurns++
+	usage = addUsage(usage, final.Usage)
+	return Response{Content: strings.TrimSpace(final.Content), Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 }
 
 func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) string {
@@ -274,6 +332,59 @@ func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolCon
 		return "Error: " + err.Error()
 	}
 	return result.Content
+}
+
+func completeWithMetrics(ctx context.Context, completer Completer, request CompletionRequest) (Response, error) {
+	if metricsCompleter, ok := completer.(MetricsCompleter); ok {
+		response, err := metricsCompleter.CompleteWithMetrics(ctx, request)
+		if err != nil {
+			return Response{}, err
+		}
+		return Response{Content: strings.TrimSpace(response.Content), Usage: response.Usage}, nil
+	}
+	content, err := completer.Complete(ctx, request)
+	if err != nil {
+		return Response{}, err
+	}
+	return Response{Content: strings.TrimSpace(content)}, nil
+}
+
+func addUsage(a, b Usage) Usage {
+	return Usage{
+		PromptTokens:     a.PromptTokens + b.PromptTokens,
+		CompletionTokens: a.CompletionTokens + b.CompletionTokens,
+	}
+}
+
+func (s *Service) toolsForMessage(message Message) map[string]Tool {
+	if len(s.tools) == 0 {
+		return nil
+	}
+	normalized := normalizeToolMatchText(message.Content)
+	out := make(map[string]Tool)
+	for name, tool := range s.tools {
+		if len(tool.Keywords) == 0 || matchesAnyKeyword(normalized, tool.Keywords) {
+			out[name] = tool
+		}
+	}
+	return out
+}
+
+func matchesAnyKeyword(content string, keywords []string) bool {
+	for _, keyword := range keywords {
+		keyword = normalizeToolMatchText(keyword)
+		if keyword != "" && strings.Contains(content, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeToolMatchText(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "_", " ")
+	value = strings.ReplaceAll(value, "-", " ")
+	return strings.Join(strings.Fields(value), " ")
 }
 
 func chatTools(tools map[string]Tool) []ChatTool {
@@ -321,7 +432,7 @@ func (s *Service) buildSystemPrompt(ctx context.Context, message Message) (strin
 	return prompt + "\n\nServer-specific instructions:\n" + instruction, nil
 }
 
-func (s *Service) buildToolSystemPrompt(ctx context.Context, message Message) (string, error) {
+func (s *Service) buildToolSystemPrompt(ctx context.Context, message Message, tools map[string]Tool) (string, error) {
 	systemPrompt, err := s.buildSystemPrompt(ctx, message)
 	if err != nil {
 		return "", err
@@ -332,7 +443,7 @@ func (s *Service) buildToolSystemPrompt(ctx context.Context, message Message) (s
 	b.WriteString("\nCurrent UTC time: ")
 	b.WriteString(time.Now().UTC().Format(time.RFC3339))
 	b.WriteString("\n\nAvailable tools:")
-	for _, tool := range s.tools {
+	for _, tool := range tools {
 		fmt.Fprintf(&b, "\n- %s: %s\n  Parameters JSON schema: %s", tool.Name, tool.Description, string(tool.Parameters))
 	}
 	b.WriteString(`

@@ -64,8 +64,10 @@ type ollamaGenerateRequest struct {
 }
 
 type ollamaGenerateResponse struct {
-	Response string `json:"response"`
-	Error    string `json:"error"`
+	Response        string `json:"response"`
+	Error           string `json:"error"`
+	PromptEvalCount int64  `json:"prompt_eval_count"`
+	EvalCount       int64  `json:"eval_count"`
 }
 
 type ollamaChatRequest struct {
@@ -103,13 +105,20 @@ type ollamaToolCallFunction struct {
 }
 
 type ollamaChatResponse struct {
-	Message ollamaChatMessage `json:"message"`
-	Error   string            `json:"error"`
+	Message         ollamaChatMessage `json:"message"`
+	Error           string            `json:"error"`
+	PromptEvalCount int64             `json:"prompt_eval_count"`
+	EvalCount       int64             `json:"eval_count"`
 }
 
 func (c *OllamaClient) Complete(ctx context.Context, request CompletionRequest) (string, error) {
+	response, err := c.CompleteWithMetrics(ctx, request)
+	return response.Content, err
+}
+
+func (c *OllamaClient) CompleteWithMetrics(ctx context.Context, request CompletionRequest) (CompletionResponse, error) {
 	if c == nil {
-		return "", nil
+		return CompletionResponse{}, nil
 	}
 	reqBody := ollamaGenerateRequest{
 		Model:  c.model,
@@ -119,37 +128,43 @@ func (c *OllamaClient) Complete(ctx context.Context, request CompletionRequest) 
 	}
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("marshal ollama request: %w", err)
+		return CompletionResponse{}, fmt.Errorf("marshal ollama request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/generate", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create ollama request: %w", err)
+		return CompletionResponse{}, fmt.Errorf("create ollama request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("call ollama: %w", err)
+		return CompletionResponse{}, fmt.Errorf("call ollama: %w", err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("read ollama response: %w", err)
+		return CompletionResponse{}, fmt.Errorf("read ollama response: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("ollama returned %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
+		return CompletionResponse{}, fmt.Errorf("ollama returned %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
 	}
 
 	var out ollamaGenerateResponse
 	if err := json.Unmarshal(respBody, &out); err != nil {
-		return "", fmt.Errorf("decode ollama response: %w", err)
+		return CompletionResponse{}, fmt.Errorf("decode ollama response: %w", err)
 	}
 	if out.Error != "" {
-		return "", fmt.Errorf("ollama error: %s", out.Error)
+		return CompletionResponse{}, fmt.Errorf("ollama error: %s", out.Error)
 	}
-	return strings.TrimSpace(out.Response), nil
+	return CompletionResponse{
+		Content: strings.TrimSpace(out.Response),
+		Usage: Usage{
+			PromptTokens:     out.PromptEvalCount,
+			CompletionTokens: out.EvalCount,
+		},
+	}, nil
 }
 
 func (c *OllamaClient) GenerateResponse(ctx context.Context, message Message) (string, error) {
@@ -204,6 +219,10 @@ func (c *OllamaClient) Chat(ctx context.Context, request ChatRequest) (ChatRespo
 	return ChatResponse{
 		Content:   strings.TrimSpace(out.Message.Content),
 		ToolCalls: chatToolCalls(out.Message.ToolCalls),
+		Usage: Usage{
+			PromptTokens:     out.PromptEvalCount,
+			CompletionTokens: out.EvalCount,
+		},
 	}, nil
 }
 
@@ -272,8 +291,25 @@ func buildUserPrompt(message Message) string {
 	if username == "" {
 		username = "the Discord user"
 	}
+	now := message.Now
+	if now.IsZero() {
+		now = time.Now()
+	}
+	timezone := strings.TrimSpace(message.Timezone)
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		loc = time.UTC
+		timezone = "UTC"
+	}
+	localNow := now.In(loc)
 	return fmt.Sprintf(`User: %s
+Current date: %s
+Current time: %s
+User timezone: %s
 Message: %s
 
-Response:`, username, message.Content)
+Response:`, username, localNow.Format("2006-01-02"), localNow.Format(time.RFC3339), timezone, message.Content)
 }

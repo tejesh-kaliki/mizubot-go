@@ -11,6 +11,23 @@ type GuildInstruction struct {
 	UpdatedAt    int64  `json:"updated_at"`
 }
 
+type LlmMessageLog struct {
+	ID               int64   `json:"id"`
+	GuildID          *string `json:"guild_id"`
+	ChannelID        string  `json:"channel_id"`
+	UserID           string  `json:"user_id"`
+	MessageID        string  `json:"message_id"`
+	PromptTokens     int64   `json:"prompt_tokens"`
+	CompletionTokens int64   `json:"completion_tokens"`
+	TotalTokens      int64   `json:"total_tokens"`
+	LlmTurns         int64   `json:"llm_turns"`
+	ToolCalls        int64   `json:"tool_calls"`
+	LatencyMs        int64   `json:"latency_ms"`
+	Status           string  `json:"status"`
+	Error            string  `json:"error"`
+	CreatedAt        int64   `json:"created_at"`
+}
+
 type PageMonitor struct {
 	ID            int64   `json:"id"`
 	UserID        string  `json:"user_id"`

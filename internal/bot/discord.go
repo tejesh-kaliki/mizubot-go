@@ -11,6 +11,7 @@ import (
 	"mizubot-go/internal/animefeed"
 	"mizubot-go/internal/bot/commands"
 	"mizubot-go/internal/llm"
+	"mizubot-go/internal/llmstats"
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 	"mizubot-go/internal/usersettings"
@@ -31,15 +32,21 @@ func (r discordRegistrar) RegisterCommands(appID, guildID string, cmds []*discor
 
 type SenderFunc func(channelID, content string) error
 
-type Bot struct {
-	session   *discordgo.Session
-	registrar CommandRegistrar
-	modules   []commands.Module
-	dryRun    bool
-	llm       *llm.Service
+type llmMessageLogger interface {
+	Create(ctx context.Context, params llmstats.CreateMessageLogParams) (llmstats.MessageLog, error)
 }
 
-func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service) (*Bot, error) {
+type Bot struct {
+	session      *discordgo.Session
+	registrar    CommandRegistrar
+	modules      []commands.Module
+	dryRun       bool
+	llm          *llm.Service
+	llmLogger    llmMessageLogger
+	userSettings *usersettings.Service
+}
+
+func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service, llmLogger llmMessageLogger) (*Bot, error) {
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
@@ -59,10 +66,12 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 		modules = append(modules, commands.NewSettingsModule(userSettingsService))
 	}
 	b := &Bot{
-		session:   s,
-		registrar: discordRegistrar{s: s},
-		modules:   modules,
-		llm:       llmService,
+		session:      s,
+		registrar:    discordRegistrar{s: s},
+		modules:      modules,
+		llm:          llmService,
+		llmLogger:    llmLogger,
+		userSettings: userSettingsService,
 	}
 	s.AddHandler(b.onInteractionCreate)
 	s.AddHandler(b.onMessageCreate)
@@ -226,20 +235,28 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		stopTyping := b.startTyping(ctx, s, m.ChannelID)
 
 		log.Printf("generating llm response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
-		generated, err := b.llm.GenerateResponse(ctx, llm.Message{
+		startedAt := time.Now()
+		timezone := b.userTimezoneForMessage(ctx, m.Author.ID)
+		generated, err := b.llm.GenerateResponseWithMetrics(ctx, llm.Message{
 			UserID:    m.Author.ID,
 			Username:  m.Author.Username,
 			ChannelID: m.ChannelID,
 			GuildID:   m.GuildID,
 			Content:   stripUserMention(m.Content, s.State.User.ID),
+			Timezone:  timezone,
+			Now:       startedAt,
 		})
+		latency := time.Since(startedAt)
 		if err != nil {
 			log.Printf("llm response generation failed: channel_id=%s user_id=%s message_id=%s error=%v", m.ChannelID, m.Author.ID, m.ID, err)
 			response = "I couldn't generate a response right now."
-		} else if generated != "" {
-			response = generated
+			b.logLLMMessage(ctx, m, llm.Response{}, latency, llmstats.StatusError, err.Error())
+		} else if generated.Content != "" {
+			response = generated.Content
+			b.logLLMMessage(ctx, m, generated, latency, llmstats.StatusSuccess, "")
 		} else {
 			log.Printf("llm returned empty response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
+			b.logLLMMessage(ctx, m, generated, latency, llmstats.StatusSuccess, "")
 		}
 		cancel()
 		stopTyping()
@@ -258,6 +275,41 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			log.Printf("discord reply send failed: channel_id=%s user_id=%s message_id=%s part=%d total_parts=%d error=%v", m.ChannelID, m.Author.ID, m.ID, idx+1, len(responses), err)
 			return
 		}
+	}
+}
+
+func (b *Bot) userTimezoneForMessage(ctx context.Context, userID string) string {
+	if b.userSettings == nil {
+		return usersettings.DefaultTimezone
+	}
+	timezone, _, err := b.userSettings.GetTimezone(ctx, userID)
+	if err != nil {
+		log.Printf("load user timezone failed: user_id=%s error=%v", userID, err)
+		return usersettings.DefaultTimezone
+	}
+	return timezone
+}
+
+func (b *Bot) logLLMMessage(ctx context.Context, m *discordgo.MessageCreate, response llm.Response, latency time.Duration, status, errText string) {
+	if b.llmLogger == nil || m == nil || m.Author == nil {
+		return
+	}
+	_, err := b.llmLogger.Create(ctx, llmstats.CreateMessageLogParams{
+		GuildID:          m.GuildID,
+		ChannelID:        m.ChannelID,
+		UserID:           m.Author.ID,
+		MessageID:        m.ID,
+		PromptTokens:     response.Usage.PromptTokens,
+		CompletionTokens: response.Usage.CompletionTokens,
+		TotalTokens:      response.Usage.TotalTokens(),
+		LLMTurns:         response.LLMTurns,
+		ToolCalls:        response.ToolCalls,
+		Latency:          latency,
+		Status:           status,
+		Error:            errText,
+	})
+	if err != nil {
+		log.Printf("llm message log failed: channel_id=%s user_id=%s message_id=%s error=%v", m.ChannelID, m.Author.ID, m.ID, err)
 	}
 }
 

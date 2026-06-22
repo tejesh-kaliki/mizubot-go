@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 type fakeCompleter struct {
@@ -36,8 +37,8 @@ func (f *fakeCompleter) Chat(_ context.Context, request ChatRequest) (ChatRespon
 
 func TestServiceGenerateResponseWithTool(t *testing.T) {
 	completer := &fakeCompleter{chat: []ChatResponse{
-		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
-		{Content: "final answer"},
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}, Usage: Usage{PromptTokens: 10, CompletionTokens: 2}},
+		{Content: "final answer", Usage: Usage{PromptTokens: 12, CompletionTokens: 4}},
 	}}
 	var gotToolCtx ToolContext
 	tool := Tool{
@@ -51,7 +52,7 @@ func TestServiceGenerateResponseWithTool(t *testing.T) {
 	}
 	service := NewService(completer, tool)
 
-	got, err := service.GenerateResponse(context.Background(), Message{
+	got, err := service.GenerateResponseWithMetrics(context.Background(), Message{
 		UserID:    "u",
 		Username:  "name",
 		ChannelID: "c",
@@ -61,8 +62,14 @@ func TestServiceGenerateResponseWithTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateResponse: %v", err)
 	}
-	if got != "final answer" {
-		t.Fatalf("response = %q, want final answer", got)
+	if got.Content != "final answer" {
+		t.Fatalf("response = %q, want final answer", got.Content)
+	}
+	if got.Usage.PromptTokens != 22 || got.Usage.CompletionTokens != 6 || got.Usage.TotalTokens() != 28 {
+		t.Fatalf("usage = %+v, want prompt=22 completion=6 total=28", got.Usage)
+	}
+	if got.LLMTurns != 2 || got.ToolCalls != 1 {
+		t.Fatalf("turn/tool counts = %d/%d, want 2/1", got.LLMTurns, got.ToolCalls)
 	}
 	if len(completer.chats) != 2 {
 		t.Fatalf("chats = %d, want 2", len(completer.chats))
@@ -161,6 +168,68 @@ func TestServiceGenerateResponseWithoutToolCall(t *testing.T) {
 	}
 	if len(completer.chats) != 1 {
 		t.Fatalf("chats = %d, want 1", len(completer.chats))
+	}
+}
+
+func TestServiceFiltersKeywordToolsWhenMessageDoesNotMatch(t *testing.T) {
+	completer := &fakeCompleter{responses: []string{"plain answer"}}
+	service := NewService(completer, Tool{
+		Name:        "keyword_tool",
+		Description: "A keyword tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Keywords:    []string{"remind"},
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			t.Fatalf("tool should not execute")
+			return ToolResult{}, nil
+		},
+	})
+
+	got, err := service.GenerateResponse(context.Background(), Message{
+		Content:  "what is your favorite anime",
+		Timezone: "Asia/Kolkata",
+		Now:      time.Date(2026, 6, 22, 10, 30, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "plain answer" {
+		t.Fatalf("response = %q, want plain answer", got)
+	}
+	if len(completer.chats) != 0 {
+		t.Fatalf("chat calls = %d, want 0", len(completer.chats))
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("complete requests = %d, want 1", len(completer.requests))
+	}
+	if !strings.Contains(completer.requests[0].UserPrompt, "User timezone: Asia/Kolkata") {
+		t.Fatalf("user prompt missing timezone context: %q", completer.requests[0].UserPrompt)
+	}
+}
+
+func TestServiceIncludesKeywordToolsWhenMessageMatches(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{{Content: "tool-aware answer"}}}
+	service := NewService(completer, Tool{
+		Name:        "keyword_tool",
+		Description: "A keyword tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Keywords:    []string{"remind"},
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "ok"}, nil
+		},
+	})
+
+	got, err := service.GenerateResponse(context.Background(), Message{Content: "remind me tomorrow"})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "tool-aware answer" {
+		t.Fatalf("response = %q, want tool-aware answer", got)
+	}
+	if len(completer.chats) != 1 {
+		t.Fatalf("chat calls = %d, want 1", len(completer.chats))
+	}
+	if len(completer.chats[0].Tools) != 1 || completer.chats[0].Tools[0].Name != "keyword_tool" {
+		t.Fatalf("tools = %+v, want keyword_tool", completer.chats[0].Tools)
 	}
 }
 
