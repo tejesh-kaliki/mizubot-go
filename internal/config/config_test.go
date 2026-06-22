@@ -27,6 +27,9 @@ ollama:
 env: "test"
 test_guild_id: "G"
 dry_run: false
+guild_instructions:
+  "G":
+    "Server rule"
 `
 
 func TestLoadFromFileAndEnvOverride(t *testing.T) {
@@ -79,5 +82,8 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 	}
 	if cfg.OllamaTimeout.String() != "5s" {
 		t.Fatalf("ollama timeout: %s", cfg.OllamaTimeout)
+	}
+	if cfg.GuildInstructions["G"] != "Server rule" {
+		t.Fatalf("guild instruction mismatch: %#v", cfg.GuildInstructions)
 	}
 }

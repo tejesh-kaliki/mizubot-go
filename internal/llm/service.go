@@ -80,12 +80,25 @@ type Tool struct {
 	Execute     ToolHandler
 }
 
+type GuildInstructionProvider interface {
+	GetGuildInstruction(ctx context.Context, guildID string) (string, bool, error)
+}
+
 type Service struct {
-	completer Completer
-	tools     map[string]Tool
+	completer                Completer
+	tools                    map[string]Tool
+	guildInstructionProvider GuildInstructionProvider
 }
 
 func NewService(completer Completer, tools ...Tool) *Service {
+	return NewServiceWithGuildInstructions(completer, nil, tools...)
+}
+
+func NewServiceWithGuildInstructions(completer Completer, guildInstructions map[string]string, tools ...Tool) *Service {
+	return NewServiceWithGuildInstructionProvider(completer, staticGuildInstructionProvider(normalizeGuildInstructions(guildInstructions)), tools...)
+}
+
+func NewServiceWithGuildInstructionProvider(completer Completer, guildInstructionProvider GuildInstructionProvider, tools ...Tool) *Service {
 	toolMap := make(map[string]Tool, len(tools))
 	for _, tool := range tools {
 		if tool.Name == "" || tool.Execute == nil {
@@ -93,7 +106,11 @@ func NewService(completer Completer, tools ...Tool) *Service {
 		}
 		toolMap[tool.Name] = tool
 	}
-	return &Service{completer: completer, tools: toolMap}
+	return &Service{
+		completer:                completer,
+		tools:                    toolMap,
+		guildInstructionProvider: guildInstructionProvider,
+	}
 }
 
 func (s *Service) GenerateResponse(ctx context.Context, message Message) (string, error) {
@@ -105,8 +122,12 @@ func (s *Service) GenerateResponse(ctx context.Context, message Message) (string
 		return "", nil
 	}
 	if len(s.tools) == 0 {
+		systemPrompt, err := s.buildSystemPrompt(ctx, message)
+		if err != nil {
+			return "", err
+		}
 		return s.completer.Complete(ctx, CompletionRequest{
-			SystemPrompt: buildSystemPrompt(),
+			SystemPrompt: systemPrompt,
 			UserPrompt:   buildUserPrompt(message),
 		})
 	}
@@ -134,8 +155,12 @@ func (s *Service) generateWithTools(ctx context.Context, message Message) (strin
 		return s.generateWithNativeTools(ctx, chatCompleter, message)
 	}
 
+	systemPrompt, err := s.buildToolSystemPrompt(ctx, message)
+	if err != nil {
+		return "", err
+	}
 	decisionText, err := s.completer.Complete(ctx, CompletionRequest{
-		SystemPrompt: buildToolSystemPrompt(s.tools),
+		SystemPrompt: systemPrompt,
 		UserPrompt:   buildToolDecisionPrompt(message),
 	})
 	if err != nil {
@@ -176,16 +201,24 @@ func (s *Service) generateWithTools(ctx context.Context, message Message) (strin
 	if err != nil {
 		return "", fmt.Errorf("marshal tool results: %w", err)
 	}
+	systemPrompt, err = s.buildSystemPrompt(ctx, message)
+	if err != nil {
+		return "", err
+	}
 	return s.completer.Complete(ctx, CompletionRequest{
-		SystemPrompt: buildSystemPrompt(),
+		SystemPrompt: systemPrompt,
 		UserPrompt:   buildToolResultPrompt(message, string(resultJSON)),
 	})
 }
 
 func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message) (string, error) {
 	tools := chatTools(s.tools)
+	systemPrompt, err := s.buildSystemPrompt(ctx, message)
+	if err != nil {
+		return "", err
+	}
 	messages := []ChatMessage{
-		{Role: "system", Content: buildSystemPrompt() + "\n\n" + buildToolResponseStylePrompt()},
+		{Role: "system", Content: systemPrompt + "\n\n" + buildToolResponseStylePrompt()},
 		{Role: "user", Content: buildUserPrompt(message)},
 	}
 
@@ -269,14 +302,37 @@ func parseToolDecision(raw string) (toolDecision, bool) {
 	return decision, true
 }
 
-func buildToolSystemPrompt(tools map[string]Tool) string {
+func (s *Service) buildSystemPrompt(ctx context.Context, message Message) (string, error) {
+	prompt := buildSystemPrompt()
+	if s.guildInstructionProvider == nil {
+		return prompt, nil
+	}
+	instruction, ok, err := s.guildInstructionProvider.GetGuildInstruction(ctx, message.GuildID)
+	if err != nil {
+		return "", fmt.Errorf("load guild instructions: %w", err)
+	}
+	if !ok {
+		return prompt, nil
+	}
+	instruction = strings.TrimSpace(instruction)
+	if instruction == "" {
+		return prompt, nil
+	}
+	return prompt + "\n\nServer-specific instructions:\n" + instruction, nil
+}
+
+func (s *Service) buildToolSystemPrompt(ctx context.Context, message Message) (string, error) {
+	systemPrompt, err := s.buildSystemPrompt(ctx, message)
+	if err != nil {
+		return "", err
+	}
 	var b strings.Builder
-	b.WriteString(buildSystemPrompt())
+	b.WriteString(systemPrompt)
 	b.WriteString("\n\nYou may call tools when they are needed to answer the user or perform a supported action.")
 	b.WriteString("\nCurrent UTC time: ")
 	b.WriteString(time.Now().UTC().Format(time.RFC3339))
 	b.WriteString("\n\nAvailable tools:")
-	for _, tool := range tools {
+	for _, tool := range s.tools {
 		fmt.Fprintf(&b, "\n- %s: %s\n  Parameters JSON schema: %s", tool.Name, tool.Description, string(tool.Parameters))
 	}
 	b.WriteString(`
@@ -287,7 +343,30 @@ Return only JSON in this exact shape:
 Use tool_calls when you need current reminder data or need to create/delete a reminder.
 If no tool is needed, return tool_calls as an empty array and put your answer in final_response.
 Do not invent tool names or parameters.`)
-	return b.String()
+	return b.String(), nil
+}
+
+func normalizeGuildInstructions(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for guildID, instruction := range in {
+		guildID = strings.TrimSpace(guildID)
+		instruction = strings.TrimSpace(instruction)
+		if guildID == "" || instruction == "" {
+			continue
+		}
+		out[guildID] = instruction
+	}
+	return out
+}
+
+type staticGuildInstructionProvider map[string]string
+
+func (p staticGuildInstructionProvider) GetGuildInstruction(_ context.Context, guildID string) (string, bool, error) {
+	instruction, ok := p[strings.TrimSpace(guildID)]
+	return instruction, ok, nil
 }
 
 func buildToolDecisionPrompt(message Message) string {

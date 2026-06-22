@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -160,5 +161,45 @@ func TestServiceGenerateResponseWithoutToolCall(t *testing.T) {
 	}
 	if len(completer.chats) != 1 {
 		t.Fatalf("chats = %d, want 1", len(completer.chats))
+	}
+}
+
+func TestServiceGenerateResponseAddsMatchingGuildInstructions(t *testing.T) {
+	completer := &fakeCompleter{responses: []string{"answer"}}
+	service := NewServiceWithGuildInstructions(completer, map[string]string{
+		"guild-1": "Do not discuss banned topic.",
+	})
+
+	if _, err := service.GenerateResponse(context.Background(), Message{
+		GuildID: "guild-1",
+		Content: "hello",
+	}); err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(completer.requests))
+	}
+	if !strings.Contains(completer.requests[0].SystemPrompt, "Server-specific instructions:") {
+		t.Fatalf("system prompt missing server instruction header: %q", completer.requests[0].SystemPrompt)
+	}
+	if !strings.Contains(completer.requests[0].SystemPrompt, "Do not discuss banned topic.") {
+		t.Fatalf("system prompt missing guild instruction: %q", completer.requests[0].SystemPrompt)
+	}
+}
+
+func TestServiceGenerateResponseSkipsOtherGuildInstructions(t *testing.T) {
+	completer := &fakeCompleter{responses: []string{"answer"}}
+	service := NewServiceWithGuildInstructions(completer, map[string]string{
+		"guild-1": "Do not discuss banned topic.",
+	})
+
+	if _, err := service.GenerateResponse(context.Background(), Message{
+		GuildID: "guild-2",
+		Content: "hello",
+	}); err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if strings.Contains(completer.requests[0].SystemPrompt, "Do not discuss banned topic.") {
+		t.Fatalf("system prompt included instruction for another guild: %q", completer.requests[0].SystemPrompt)
 	}
 }

@@ -4,6 +4,13 @@
 
 package data
 
+type GuildInstruction struct {
+	GuildID      string `json:"guild_id"`
+	Instructions string `json:"instructions"`
+	CreatedAt    int64  `json:"created_at"`
+	UpdatedAt    int64  `json:"updated_at"`
+}
+
 type PageMonitor struct {
 	ID            int64   `json:"id"`
 	UserID        string  `json:"user_id"`

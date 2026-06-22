@@ -28,18 +28,20 @@ type Config struct {
 	OllamaBaseURL          string
 	OllamaModel            string
 	OllamaTimeout          time.Duration
+	GuildInstructions      map[string]string
 }
 
 type fileConfig struct {
-	DiscordToken string           `yaml:"discord_token"`
-	DatabasePath string           `yaml:"database_path"`
-	TickInterval string           `yaml:"tick_interval"`
-	Anime        animeFileConfig  `yaml:"anime"`
-	AWS          awsFileConfig    `yaml:"aws"`
-	Env          string           `yaml:"env"`
-	TestGuildID  string           `yaml:"test_guild_id"`
-	DryRun       bool             `yaml:"dry_run"`
-	Ollama       ollamaFileConfig `yaml:"ollama"`
+	DiscordToken      string            `yaml:"discord_token"`
+	DatabasePath      string            `yaml:"database_path"`
+	TickInterval      string            `yaml:"tick_interval"`
+	Anime             animeFileConfig   `yaml:"anime"`
+	AWS               awsFileConfig     `yaml:"aws"`
+	Env               string            `yaml:"env"`
+	TestGuildID       string            `yaml:"test_guild_id"`
+	DryRun            bool              `yaml:"dry_run"`
+	Ollama            ollamaFileConfig  `yaml:"ollama"`
+	GuildInstructions map[string]string `yaml:"guild_instructions"`
 }
 
 type animeFileConfig struct {
@@ -190,6 +192,7 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		OllamaBaseURL:          fallback(e.OllamaBaseURL, f.Ollama.BaseURL, "http://localhost:11434"),
 		OllamaModel:            fallback(e.OllamaModel, f.Ollama.Model, "llama3.2"),
 		OllamaTimeout:          ollamaTimeout,
+		GuildInstructions:      f.GuildInstructions,
 	}, nil
 }
 
