@@ -49,3 +49,4 @@ config.test.yaml
 prod/config.yml
 prod/data
 
+/.gocache

@@ -13,6 +13,7 @@ import (
 	"mizubot-go/internal/bot"
 	"mizubot-go/internal/config"
 	"mizubot-go/internal/db"
+	"mizubot-go/internal/guildinstructions"
 	"mizubot-go/internal/llm"
 	llmtools "mizubot-go/internal/llm/tools"
 	"mizubot-go/internal/pagemonitor"
@@ -46,13 +47,17 @@ func main() {
 		log.Fatalf("db migrate error: %v", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	store := reminders.NewStore(database)
 	reminderService := reminders.NewService(store)
 	userSettingsStore := usersettings.NewStore(database)
 	userSettingsService := usersettings.NewService(userSettingsStore)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	guildInstructionStore := guildinstructions.NewStore(database)
+	if err := guildinstructions.Seed(ctx, guildInstructionStore, cfg.GuildInstructions); err != nil {
+		log.Fatalf("guild instruction seed error: %v", err)
+	}
 
 	var publisher animefeed.Publisher
 	if cfg.S3AccessKey != "" && cfg.S3SecretKey != "" && cfg.S3Bucket != "" && cfg.S3Region != "" {
@@ -75,11 +80,11 @@ func main() {
 	monitorStore := pagemonitor.NewStore(database)
 	monitorService := pagemonitor.NewService(monitorStore)
 
-	llmService := llm.NewService(llm.NewOllamaClient(llm.OllamaConfig{
+	llmService := llm.NewServiceWithGuildInstructionProvider(llm.NewOllamaClient(llm.OllamaConfig{
 		BaseURL: cfg.OllamaBaseURL,
 		Model:   cfg.OllamaModel,
 		Timeout: cfg.OllamaTimeout,
-	}), append(
+	}), guildInstructionStore, append(
 		llmtools.NewReminderTools(reminderService, userSettingsService),
 		llmtools.NewUserSettingsTools(userSettingsService)...,
 	)...)
