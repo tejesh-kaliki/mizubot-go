@@ -4,8 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
+
+	"github.com/robfig/cron/v3"
 )
 
 type Service struct {
@@ -19,6 +22,8 @@ type CreateReminderInput struct {
 	Message   string
 	Schedule  string
 	At        string
+	CronExpr  string
+	Timezone  string
 }
 
 func NewService(store *Store) *Service {
@@ -27,12 +32,16 @@ func NewService(store *Store) *Service {
 
 func (s *Service) CreateReminder(ctx context.Context, input CreateReminderInput) (*Reminder, error) {
 	schedule := Schedule(strings.ToLower(strings.TrimSpace(input.Schedule)))
-	if schedule != ScheduleOnce && schedule != ScheduleHourly && schedule != ScheduleDaily {
-		return nil, errors.New("Invalid schedule. Use once, hourly, or daily.")
+	if schedule != ScheduleOnce && schedule != ScheduleHourly && schedule != ScheduleDaily && schedule != ScheduleCron {
+		return nil, errors.New("Invalid schedule. Use once, hourly, daily, or cron.")
 	}
 
-	now := time.Now().UTC()
-	nextRun, atTime, err := nextRunForSchedule(now, schedule, input.At)
+	normalized, err := normalizeSchedule(time.Now().UTC(), normalizeInput{
+		Schedule: schedule,
+		At:       input.At,
+		CronExpr: input.CronExpr,
+		Timezone: input.Timezone,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +52,11 @@ func (s *Service) CreateReminder(ctx context.Context, input CreateReminderInput)
 		GuildID:   sql.NullString{String: input.GuildID, Valid: input.GuildID != ""},
 		Message:   input.Message,
 		Schedule:  schedule,
-		AtTime:    atTime,
-		NextRun:   nextRun,
+		AtTime:    normalized.AtTime,
+		CronExpr:  normalized.CronExpr,
+		Once:      normalized.Once,
+		Timezone:  normalized.Timezone,
+		NextRun:   normalized.NextRun,
 	}
 	if err := s.store.Create(ctx, reminder); err != nil {
 		return nil, err
@@ -57,10 +69,73 @@ func (s *Service) ListUserReminders(ctx context.Context, userID string) ([]Remin
 }
 
 func (s *Service) DeleteReminder(ctx context.Context, id int64, userID string) (bool, error) {
-	return s.store.Delete(ctx, id, userID)
+	_, ok, err := s.DeleteReminderWithDetails(ctx, id, userID)
+	return ok, err
 }
 
-func nextRunForSchedule(now time.Time, schedule Schedule, at string) (time.Time, sql.NullString, error) {
+func (s *Service) DeleteReminderWithDetails(ctx context.Context, id int64, userID string) (Reminder, bool, error) {
+	reminder, ok, err := s.store.GetOwned(ctx, id, userID)
+	if err != nil || !ok {
+		return Reminder{}, ok, err
+	}
+	deleted, err := s.store.Delete(ctx, id, userID)
+	if err != nil {
+		return Reminder{}, false, err
+	}
+	if !deleted {
+		return Reminder{}, false, nil
+	}
+	return reminder, true, nil
+}
+
+type normalizeInput struct {
+	Schedule Schedule
+	At       string
+	CronExpr string
+	Timezone string
+}
+
+type normalizedSchedule struct {
+	AtTime   sql.NullString
+	CronExpr string
+	Once     bool
+	Timezone string
+	NextRun  time.Time
+}
+
+func normalizeSchedule(now time.Time, input normalizeInput) (normalizedSchedule, error) {
+	timezone := strings.TrimSpace(input.Timezone)
+	if timezone == "" {
+		timezone = "UTC"
+	}
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return normalizedSchedule{}, errors.New("invalid timezone")
+	}
+
+	nextRun, atTime, err := nextRunForSchedule(now, input.Schedule, input.At, input.CronExpr, loc)
+	if err != nil {
+		return normalizedSchedule{}, err
+	}
+
+	cronExpr := ""
+	if input.Schedule != ScheduleOnce {
+		cronExpr, err = cronForSchedule(now, input.Schedule, input.At, input.CronExpr, loc)
+		if err != nil {
+			return normalizedSchedule{}, err
+		}
+	}
+
+	return normalizedSchedule{
+		AtTime:   atTime,
+		CronExpr: cronExpr,
+		Once:     input.Schedule == ScheduleOnce,
+		Timezone: loc.String(),
+		NextRun:  nextRun,
+	}, nil
+}
+
+func nextRunForSchedule(now time.Time, schedule Schedule, at, cronExpr string, loc *time.Location) (time.Time, sql.NullString, error) {
 	now = now.UTC()
 	at = strings.TrimSpace(at)
 
@@ -74,80 +149,155 @@ func nextRunForSchedule(now time.Time, schedule Schedule, at string) (time.Time,
 			nextRun := now.Add(duration)
 			return nextRun, sql.NullString{String: nextRun.Format(time.RFC3339), Valid: true}, nil
 		}
-		parsed, err := parseFlexibleTimeUTC(at)
+		parsed, err := parseFlexibleTime(at, loc)
 		if err != nil || !parsed.After(now) {
-			return time.Time{}, sql.NullString{}, errors.New("Invalid time. For once, use a duration like '10m', '2h', '3d', or an absolute UTC time like '2025-01-31 15:04'.")
+			return time.Time{}, sql.NullString{}, errors.New("Invalid time. For once, use a duration like '10m', '2h', '3d', or an absolute time like '2025-01-31 15:04'.")
 		}
 		return parsed, sql.NullString{String: parsed.Format(time.RFC3339), Valid: true}, nil
 	case ScheduleHourly:
-		if at == "" {
-			return now.Truncate(time.Minute).Add(time.Minute), sql.NullString{}, nil
+		expr, err := cronForSchedule(now, schedule, at, "", loc)
+		if err != nil {
+			return time.Time{}, sql.NullString{}, err
 		}
-		parsed, err := parseHourMinuteUTC(now, at)
-		if err != nil || !parsed.After(now) {
-			return now.Add(time.Hour), sql.NullString{}, nil
-		}
-		return parsed, sql.NullString{}, nil
+		nextRun, err := nextRunForCron(now, expr, loc)
+		return nextRun, sql.NullString{}, err
 	case ScheduleDaily:
 		hhmm := at
 		if hhmm == "" {
-			nm := now.Truncate(time.Minute).Add(time.Minute)
-			hhmm = nm.Format("15:04")
+			hhmm = now.In(loc).Truncate(time.Minute).Add(time.Minute).Format("15:04")
 		}
-		if len(hhmm) != 5 || hhmm[2] != ':' {
-			return time.Time{}, sql.NullString{}, errors.New("Use HH:MM (UTC), e.g., 09:00.")
+		expr, err := cronForSchedule(now, schedule, hhmm, "", loc)
+		if err != nil {
+			return time.Time{}, sql.NullString{}, err
 		}
-		hour := (int(hhmm[0]-'0') * 10) + int(hhmm[1]-'0')
-		min := (int(hhmm[3]-'0') * 10) + int(hhmm[4]-'0')
-		nextRun := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, time.UTC)
-		if !nextRun.After(now) {
-			nextRun = nextRun.Add(24 * time.Hour)
+		nextRun, err := nextRunForCron(now, expr, loc)
+		if err != nil {
+			return time.Time{}, sql.NullString{}, err
 		}
 		return nextRun, sql.NullString{String: hhmm, Valid: true}, nil
+	case ScheduleCron:
+		expr := strings.TrimSpace(cronExpr)
+		if expr == "" {
+			expr = at
+		}
+		nextRun, err := nextRunForCron(now, expr, loc)
+		if err != nil {
+			return time.Time{}, sql.NullString{}, err
+		}
+		return nextRun, sql.NullString{}, nil
 	default:
 		return time.Time{}, sql.NullString{}, errors.New("unknown schedule")
 	}
 }
 
-func parseFlexibleTimeUTC(s string) (time.Time, error) {
+func cronForSchedule(now time.Time, schedule Schedule, at, cronExpr string, loc *time.Location) (string, error) {
+	at = strings.TrimSpace(at)
+	switch schedule {
+	case ScheduleHourly:
+		minute := now.In(loc).Truncate(time.Minute).Add(time.Minute).Minute()
+		if at != "" {
+			parsed, err := parseHourMinute(now, at, loc)
+			if err != nil {
+				return "", errors.New("Use :MM for hourly reminders, e.g., :15.")
+			}
+			minute = parsed.In(loc).Minute()
+		}
+		return fmt.Sprintf("%d * * * *", minute), nil
+	case ScheduleDaily:
+		if at == "" {
+			at = now.In(loc).Truncate(time.Minute).Add(time.Minute).Format("15:04")
+		}
+		hour, minute, err := parseHHMM(at)
+		if err != nil {
+			return "", errors.New("Use HH:MM, e.g., 09:00.")
+		}
+		return fmt.Sprintf("%d %d * * *", minute, hour), nil
+	case ScheduleCron:
+		expr := strings.TrimSpace(cronExpr)
+		if expr == "" {
+			expr = at
+		}
+		if _, err := cron.ParseStandard(expr); err != nil {
+			return "", err
+		}
+		return expr, nil
+	default:
+		return "", nil
+	}
+}
+
+func nextRunForCron(now time.Time, expr string, loc *time.Location) (time.Time, error) {
+	schedule, err := cron.ParseStandard(expr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return schedule.Next(now.In(loc)).UTC(), nil
+}
+
+func parseFlexibleTime(s string, loc *time.Location) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if t, err := time.Parse(time.RFC3339, s); err == nil {
 		return t.UTC(), nil
 	}
 	const layout = "2006-01-02 15:04"
-	if t, err := time.ParseInLocation(layout, s, time.UTC); err == nil {
+	if t, err := time.ParseInLocation(layout, s, loc); err == nil {
 		return t.UTC(), nil
 	}
 	return time.Time{}, errors.New("bad time format")
 }
 
-func parseHourMinuteUTC(now time.Time, s string) (time.Time, error) {
+func parseHourMinute(now time.Time, s string, loc *time.Location) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	if len(s) == 3 && s[0] == ':' {
 		min := (int(s[1]-'0') * 10) + int(s[2]-'0')
 		if min < 0 || min > 59 {
 			return time.Time{}, errors.New("bad minutes")
 		}
-		base := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, time.UTC)
+		localNow := now.In(loc)
+		base := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), localNow.Hour(), 0, 0, 0, loc)
 		t := base.Add(time.Duration(min) * time.Minute)
-		if !t.After(now) {
+		if !t.After(localNow) {
 			t = base.Add(time.Hour).Add(time.Duration(min) * time.Minute)
 		}
-		return t, nil
+		return t.UTC(), nil
 	}
 	if len(s) == 5 && s[2] == ':' {
-		hour := (int(s[0]-'0') * 10) + int(s[1]-'0')
-		min := (int(s[3]-'0') * 10) + int(s[4]-'0')
-		if hour < 0 || hour > 23 || min < 0 || min > 59 {
+		hour, min, err := parseHHMM(s)
+		if err != nil {
 			return time.Time{}, errors.New("bad hhmm")
 		}
-		t := time.Date(now.Year(), now.Month(), now.Day(), hour, min, 0, 0, time.UTC)
-		if !t.After(now) {
+		localNow := now.In(loc)
+		t := time.Date(localNow.Year(), localNow.Month(), localNow.Day(), hour, min, 0, 0, loc)
+		if !t.After(localNow) {
 			t = t.Add(24 * time.Hour)
 		}
-		return t, nil
+		return t.UTC(), nil
 	}
 	return time.Time{}, errors.New("bad format")
+}
+
+func parseHHMM(s string) (int, int, error) {
+	if len(s) != 5 || s[2] != ':' {
+		return 0, 0, errors.New("bad hhmm")
+	}
+	hour := (int(s[0]-'0') * 10) + int(s[1]-'0')
+	min := (int(s[3]-'0') * 10) + int(s[4]-'0')
+	if hour < 0 || hour > 23 || min < 0 || min > 59 {
+		return 0, 0, errors.New("bad hhmm")
+	}
+	return hour, min, nil
+}
+
+func parseFlexibleTimeUTC(s string) (time.Time, error) {
+	return parseFlexibleTime(s, time.UTC)
+}
+
+func parseHourMinuteUTC(now time.Time, s string) (time.Time, error) {
+	return parseHourMinute(now, s, time.UTC)
+}
+
+func legacyNextRunForSchedule(now time.Time, schedule Schedule, at string) (time.Time, sql.NullString, error) {
+	return nextRunForSchedule(now, schedule, at, "", time.UTC)
 }
 
 func parseRelativeDuration(s string) (time.Duration, bool) {

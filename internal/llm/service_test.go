@@ -74,6 +74,70 @@ func TestServiceGenerateResponseWithTool(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateResponseAllowsMultipleToolRounds(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
+		{Content: "final answer"},
+	}}
+	calls := 0
+	service := NewService(completer, Tool{
+		Name:        "test_tool",
+		Description: "A test tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			calls++
+			return ToolResult{Content: "tool result"}, nil
+		},
+	})
+
+	got, err := service.GenerateResponse(context.Background(), Message{Content: "use tools"})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "final answer" {
+		t.Fatalf("response = %q, want final answer", got)
+	}
+	if calls != 2 {
+		t.Fatalf("tool calls = %d, want 2", calls)
+	}
+	if len(completer.chats) != 3 {
+		t.Fatalf("chats = %d, want 3", len(completer.chats))
+	}
+}
+
+func TestServiceGenerateResponseStopsToolLoopAtLimit(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
+		{ToolCalls: []ChatToolCall{{Name: "test_tool", Arguments: json.RawMessage(`{}`)}}},
+		{Content: "limited final answer"},
+	}}
+	service := NewService(completer, Tool{
+		Name:        "test_tool",
+		Description: "A test tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "tool result"}, nil
+		},
+	})
+
+	got, err := service.GenerateResponse(context.Background(), Message{Content: "loop tools"})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "limited final answer" {
+		t.Fatalf("response = %q, want limited final answer", got)
+	}
+	if len(completer.chats) != maxToolIterations+1 {
+		t.Fatalf("chats = %d, want %d", len(completer.chats), maxToolIterations+1)
+	}
+	if len(completer.chats[len(completer.chats)-1].Tools) != 0 {
+		t.Fatalf("final chat should not include tools")
+	}
+}
+
 func TestServiceGenerateResponseWithoutToolCall(t *testing.T) {
 	completer := &fakeCompleter{chat: []ChatResponse{
 		{Content: "direct answer"},

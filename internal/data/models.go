@@ -40,6 +40,9 @@ type Reminder struct {
 	NextRun   int64   `json:"next_run"`
 	CreatedAt int64   `json:"created_at"`
 	UpdatedAt int64   `json:"updated_at"`
+	CronExpr  string  `json:"cron_expr"`
+	Once      int64   `json:"once"`
+	Timezone  string  `json:"timezone"`
 }
 
 type UserAnimeEntry struct {
@@ -72,4 +75,11 @@ type UserAnimeSetting struct {
 	DefaultChannelID *string `json:"default_channel_id"`
 	CreatedAt        int64   `json:"created_at"`
 	UpdatedAt        int64   `json:"updated_at"`
+}
+
+type UserSetting struct {
+	UserID    string `json:"user_id"`
+	Timezone  string `json:"timezone"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }

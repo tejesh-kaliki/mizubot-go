@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const maxToolIterations = 4
+
 type Message struct {
 	UserID    string
 	Username  string
@@ -183,22 +185,9 @@ func (s *Service) generateWithTools(ctx context.Context, message Message) (strin
 func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message) (string, error) {
 	tools := chatTools(s.tools)
 	messages := []ChatMessage{
-		{Role: "system", Content: buildSystemPrompt()},
+		{Role: "system", Content: buildSystemPrompt() + "\n\n" + buildToolResponseStylePrompt()},
 		{Role: "user", Content: buildUserPrompt(message)},
 	}
-	first, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages, Tools: tools})
-	if err != nil {
-		return "", err
-	}
-	if len(first.ToolCalls) == 0 {
-		return strings.TrimSpace(first.Content), nil
-	}
-
-	messages = append(messages, ChatMessage{
-		Role:      "assistant",
-		Content:   first.Content,
-		ToolCalls: first.ToolCalls,
-	})
 
 	toolCtx := ToolContext{
 		UserID:    message.UserID,
@@ -206,16 +195,35 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 		ChannelID: message.ChannelID,
 		GuildID:   message.GuildID,
 	}
-	for _, call := range first.ToolCalls {
-		result := executeToolCall(ctx, s.tools, toolCtx, call)
+	for range maxToolIterations {
+		response, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages, Tools: tools})
+		if err != nil {
+			return "", err
+		}
+		if len(response.ToolCalls) == 0 {
+			return strings.TrimSpace(response.Content), nil
+		}
+
 		messages = append(messages, ChatMessage{
-			Role:     "tool",
-			ToolName: call.Name,
-			Content:  result,
+			Role:      "assistant",
+			Content:   response.Content,
+			ToolCalls: response.ToolCalls,
 		})
+		for _, call := range response.ToolCalls {
+			result := executeToolCall(ctx, s.tools, toolCtx, call)
+			messages = append(messages, ChatMessage{
+				Role:     "tool",
+				ToolName: call.Name,
+				Content:  result,
+			})
+		}
 	}
 
-	final, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages, Tools: tools})
+	messages = append(messages, ChatMessage{
+		Role:    "system",
+		Content: "Tool call limit reached. Write the final response using the tool results already available. Do not call more tools.",
+	})
+	final, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages})
 	if err != nil {
 		return "", err
 	}
@@ -293,5 +301,19 @@ func buildToolResultPrompt(message Message, results string) string {
 Tool results:
 %s
 
-Write the final response to the user. Be concise and mention any tool error plainly.`, buildUserPrompt(message), results)
+%s
+
+Write the final response to the user. Be concise and mention any tool error plainly.`, buildUserPrompt(message), results, buildToolResponseStylePrompt())
+}
+
+func buildToolResponseStylePrompt() string {
+	return `When using reminder tool results:
+- Do not say "cron", "cron job", "tool", or expose implementation details unless the user specifically asks.
+- For listed reminders, include the message, next run using the Discord timestamp from the tool result, channel, and timezone.
+- Include reminder IDs only when they help the user act on the reminder, such as when listing multiple reminders, disambiguating similar reminders, or after creating/deleting one.
+- For deleted reminders, confirm the deletion and include the ID if that is all the tool result provides. If more detail is available, mention what was removed.
+- For created reminders, include the reminder ID, message, next run, channel, and timezone.
+- When creating reminders, infer a concise reminder message from the user's intent instead of copying the whole command. For example, "remind me to take meds tomorrow" should create message "take meds". Preserve exact text only when the user quotes it or explicitly asks for that exact wording.
+- For reminder_create, use once=true with run_at for one-time reminders. Use once=false with cron_expr for repeated reminders. Do not pass slash-command style schedule/at fields.
+- Prefer clear Discord-friendly formatting with short bullets for multiple reminders.`
 }

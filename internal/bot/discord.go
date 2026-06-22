@@ -13,6 +13,7 @@ import (
 	"mizubot-go/internal/llm"
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
+	"mizubot-go/internal/usersettings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -38,7 +39,7 @@ type Bot struct {
 	llm       *llm.Service
 }
 
-func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service) (*Bot, error) {
+func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service) (*Bot, error) {
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
@@ -46,13 +47,16 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 
 	reminderService := reminders.NewService(store)
 	modules := []commands.Module{
-		commands.NewRemindModule(reminderService),
+		commands.NewRemindModule(reminderService, userSettingsService),
 	}
 	if animeService != nil {
 		modules = append(modules, commands.NewAnimeModule(animeService))
 	}
 	if monitorService != nil {
 		modules = append(modules, commands.NewMonitorModule(monitorService))
+	}
+	if userSettingsService != nil {
+		modules = append(modules, commands.NewSettingsModule(userSettingsService))
 	}
 	b := &Bot{
 		session:   s,

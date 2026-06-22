@@ -9,5 +9,8 @@ services:
     volumes:
       - ./config.yml:/config.yml:ro
       - ./data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DATABASE_PATH: "/data/mizubot.db"
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"

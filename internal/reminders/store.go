@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"mizubot-go/internal/data"
+
+	"github.com/robfig/cron/v3"
 )
 
 type Schedule string
@@ -15,6 +17,7 @@ const (
 	ScheduleOnce   Schedule = "once"
 	ScheduleHourly Schedule = "hourly"
 	ScheduleDaily  Schedule = "daily"
+	ScheduleCron   Schedule = "cron"
 )
 
 type Reminder struct {
@@ -25,6 +28,9 @@ type Reminder struct {
 	Message   string
 	Schedule  Schedule
 	AtTime    sql.NullString // RFC3339 for once; HH:MM for daily
+	CronExpr  string
+	Once      bool
+	Timezone  string
 	NextRun   time.Time
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -60,6 +66,9 @@ func (s *Store) Create(ctx context.Context, r *Reminder) error {
 		Message:   r.Message,
 		Schedule:  string(r.Schedule),
 		AtTime:    atPtr,
+		CronExpr:  r.CronExpr,
+		Once:      boolToInt64(r.Once),
+		Timezone:  timezoneOrUTC(r.Timezone),
 		NextRun:   r.NextRun.UTC().Unix(),
 		CreatedAt: r.CreatedAt.Unix(),
 		UpdatedAt: r.UpdatedAt.Unix(),
@@ -67,7 +76,7 @@ func (s *Store) Create(ctx context.Context, r *Reminder) error {
 	if err != nil {
 		return err
 	}
-	r.ID = created.ID
+	*r = convertCreateReminderRow(created)
 	return nil
 }
 
@@ -78,7 +87,7 @@ func (s *Store) ListByUser(ctx context.Context, userID string) ([]Reminder, erro
 	}
 	out := make([]Reminder, 0, len(recs))
 	for _, it := range recs {
-		out = append(out, convertModel(it))
+		out = append(out, convertListByUserRow(it))
 	}
 	return out, nil
 }
@@ -91,6 +100,17 @@ func (s *Store) Delete(ctx context.Context, id int64, userID string) (bool, erro
 	return n > 0, nil
 }
 
+func (s *Store) GetOwned(ctx context.Context, id int64, userID string) (Reminder, bool, error) {
+	row, err := s.q.GetOwned(ctx, s.db, id, userID)
+	if err == sql.ErrNoRows {
+		return Reminder{}, false, nil
+	}
+	if err != nil {
+		return Reminder{}, false, err
+	}
+	return convertGetOwnedRow(row), true, nil
+}
+
 func (s *Store) Due(ctx context.Context, now time.Time, limit int) ([]Reminder, error) {
 	recs, err := s.q.ListDue(ctx, s.db, now.UTC().Unix(), int64(limit))
 	if err != nil {
@@ -98,7 +118,7 @@ func (s *Store) Due(ctx context.Context, now time.Time, limit int) ([]Reminder, 
 	}
 	out := make([]Reminder, 0, len(recs))
 	for _, it := range recs {
-		out = append(out, convertModel(it))
+		out = append(out, convertListDueRow(it))
 	}
 	return out, nil
 }
@@ -112,6 +132,21 @@ func (s *Store) DeleteID(ctx context.Context, id int64) error {
 }
 
 func NextAfter(r Reminder, from time.Time) (time.Time, bool, error) {
+	if r.Once || r.Schedule == ScheduleOnce {
+		return time.Time{}, false, nil
+	}
+	if r.CronExpr != "" {
+		loc, err := time.LoadLocation(timezoneOrUTC(r.Timezone))
+		if err != nil {
+			return time.Time{}, false, err
+		}
+		schedule, err := cron.ParseStandard(r.CronExpr)
+		if err != nil {
+			return time.Time{}, false, err
+		}
+		return schedule.Next(from.In(loc)).UTC(), true, nil
+	}
+
 	switch r.Schedule {
 	case ScheduleOnce:
 		return time.Time{}, false, nil
@@ -138,25 +173,95 @@ func NextAfter(r Reminder, from time.Time) (time.Time, bool, error) {
 	}
 }
 
-func convertModel(m data.Reminder) Reminder {
-	var guild sql.NullString
-	if m.GuildID != nil {
-		guild = sql.NullString{String: *m.GuildID, Valid: true}
-	}
-	var at sql.NullString
-	if m.AtTime != nil {
-		at = sql.NullString{String: *m.AtTime, Valid: true}
-	}
+func convertCreateReminderRow(m data.CreateReminderRow) Reminder {
 	return Reminder{
 		ID:        m.ID,
 		UserID:    m.UserID,
 		ChannelID: m.ChannelID,
-		GuildID:   guild,
+		GuildID:   nullStringFromPtr(m.GuildID),
 		Message:   m.Message,
 		Schedule:  Schedule(m.Schedule),
-		AtTime:    at,
+		AtTime:    nullStringFromPtr(m.AtTime),
+		CronExpr:  m.CronExpr,
+		Once:      m.Once != 0,
+		Timezone:  timezoneOrUTC(m.Timezone),
 		NextRun:   time.Unix(m.NextRun, 0).UTC(),
 		CreatedAt: time.Unix(m.CreatedAt, 0).UTC(),
 		UpdatedAt: time.Unix(m.UpdatedAt, 0).UTC(),
 	}
+}
+
+func convertListByUserRow(m data.ListByUserRow) Reminder {
+	return Reminder{
+		ID:        m.ID,
+		UserID:    m.UserID,
+		ChannelID: m.ChannelID,
+		GuildID:   nullStringFromPtr(m.GuildID),
+		Message:   m.Message,
+		Schedule:  Schedule(m.Schedule),
+		AtTime:    nullStringFromPtr(m.AtTime),
+		CronExpr:  m.CronExpr,
+		Once:      m.Once != 0,
+		Timezone:  timezoneOrUTC(m.Timezone),
+		NextRun:   time.Unix(m.NextRun, 0).UTC(),
+		CreatedAt: time.Unix(m.CreatedAt, 0).UTC(),
+		UpdatedAt: time.Unix(m.UpdatedAt, 0).UTC(),
+	}
+}
+
+func convertListDueRow(m data.ListDueRow) Reminder {
+	return Reminder{
+		ID:        m.ID,
+		UserID:    m.UserID,
+		ChannelID: m.ChannelID,
+		GuildID:   nullStringFromPtr(m.GuildID),
+		Message:   m.Message,
+		Schedule:  Schedule(m.Schedule),
+		AtTime:    nullStringFromPtr(m.AtTime),
+		CronExpr:  m.CronExpr,
+		Once:      m.Once != 0,
+		Timezone:  timezoneOrUTC(m.Timezone),
+		NextRun:   time.Unix(m.NextRun, 0).UTC(),
+		CreatedAt: time.Unix(m.CreatedAt, 0).UTC(),
+		UpdatedAt: time.Unix(m.UpdatedAt, 0).UTC(),
+	}
+}
+
+func convertGetOwnedRow(m data.GetOwnedRow) Reminder {
+	return Reminder{
+		ID:        m.ID,
+		UserID:    m.UserID,
+		ChannelID: m.ChannelID,
+		GuildID:   nullStringFromPtr(m.GuildID),
+		Message:   m.Message,
+		Schedule:  Schedule(m.Schedule),
+		AtTime:    nullStringFromPtr(m.AtTime),
+		CronExpr:  m.CronExpr,
+		Once:      m.Once != 0,
+		Timezone:  timezoneOrUTC(m.Timezone),
+		NextRun:   time.Unix(m.NextRun, 0).UTC(),
+		CreatedAt: time.Unix(m.CreatedAt, 0).UTC(),
+		UpdatedAt: time.Unix(m.UpdatedAt, 0).UTC(),
+	}
+}
+
+func nullStringFromPtr(v *string) sql.NullString {
+	if v == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: *v, Valid: true}
+}
+
+func boolToInt64(v bool) int64 {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func timezoneOrUTC(timezone string) string {
+	if timezone == "" {
+		return "UTC"
+	}
+	return timezone
 }

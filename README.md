@@ -35,6 +35,12 @@ When `BOT_ENV=test` and `TEST_GUILD_ID` are set, the `/remind` slash command is 
 
 When the bot is mentioned in Discord, it sends the current message to the configured Ollama model and replies to that message.
 
+For Docker Compose, local Ollama should be reached through the host gateway. The production compose file sets:
+
+```yaml
+OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+```
+
 ### Slash Commands
 
 - `/remind add message:<text> schedule:(once|hourly|daily) at:<10m|2h|3d|RFC3339|HH:MM|:MM>`

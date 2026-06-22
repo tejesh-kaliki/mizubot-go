@@ -27,6 +27,9 @@ func openTestDB(t *testing.T) *sql.DB {
         message TEXT NOT NULL,
         schedule TEXT NOT NULL,
         at_time TEXT,
+        cron_expr TEXT NOT NULL DEFAULT '',
+        once INTEGER NOT NULL DEFAULT 0,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
         next_run INTEGER NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -41,7 +44,7 @@ func TestSchedulerSendsAndReschedules(t *testing.T) {
 	db := openTestDB(t)
 	store := reminders.NewStore(db)
 	now := time.Now().UTC()
-	r := &reminders.Reminder{UserID: "u", ChannelID: "c", Message: "msg", Schedule: reminders.ScheduleHourly, NextRun: now}
+	r := &reminders.Reminder{UserID: "u", ChannelID: "c", Message: "msg", Schedule: reminders.ScheduleHourly, CronExpr: "0 * * * *", Timezone: "UTC", NextRun: now}
 	if err := store.Create(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +68,7 @@ func TestSchedulerKeepsReminderDueWhenSendFails(t *testing.T) {
 	db := openTestDB(t)
 	store := reminders.NewStore(db)
 	now := time.Now().UTC()
-	r := &reminders.Reminder{UserID: "u", ChannelID: "c", Message: "msg", Schedule: reminders.ScheduleOnce, NextRun: now}
+	r := &reminders.Reminder{UserID: "u", ChannelID: "c", Message: "msg", Schedule: reminders.ScheduleOnce, Once: true, Timezone: "UTC", NextRun: now}
 	if err := store.Create(context.Background(), r); err != nil {
 		t.Fatal(err)
 	}

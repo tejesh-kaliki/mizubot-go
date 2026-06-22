@@ -23,6 +23,9 @@ func openTestDB(t *testing.T) *sql.DB {
         message TEXT NOT NULL,
         schedule TEXT NOT NULL,
         at_time TEXT,
+        cron_expr TEXT NOT NULL DEFAULT '',
+        once INTEGER NOT NULL DEFAULT 0,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
         next_run INTEGER NOT NULL,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
@@ -37,7 +40,7 @@ func TestCreateListDeleteReminder(t *testing.T) {
 	db := openTestDB(t)
 	store := NewStore(db)
 	now := time.Now()
-	r := &Reminder{UserID: "u", ChannelID: "c", Message: "hello", Schedule: ScheduleHourly, NextRun: now.Add(time.Hour)}
+	r := &Reminder{UserID: "u", ChannelID: "c", Message: "hello", Schedule: ScheduleHourly, CronExpr: "0 * * * *", Timezone: "UTC", NextRun: now.Add(time.Hour)}
 	if err := store.Create(context.Background(), r); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -54,6 +57,41 @@ func TestCreateListDeleteReminder(t *testing.T) {
 	ok, err := store.Delete(context.Background(), r.ID, "u")
 	if err != nil || !ok {
 		t.Fatalf("delete: %v ok=%v", err, ok)
+	}
+}
+
+func TestDeleteReminderWithDetails(t *testing.T) {
+	db := openTestDB(t)
+	store := NewStore(db)
+	service := NewService(store)
+
+	r := &Reminder{
+		UserID:    "u",
+		ChannelID: "c",
+		Message:   "hello",
+		Schedule:  ScheduleDaily,
+		CronExpr:  "0 9 * * *",
+		Timezone:  "UTC",
+		NextRun:   time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC),
+	}
+	if err := store.Create(context.Background(), r); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	deleted, ok, err := service.DeleteReminderWithDetails(context.Background(), r.ID, "u")
+	if err != nil || !ok {
+		t.Fatalf("delete with details: %v ok=%v", err, ok)
+	}
+	if deleted.Message != "hello" || deleted.ChannelID != "c" || deleted.CronExpr != "0 9 * * *" {
+		t.Fatalf("deleted reminder mismatch: %+v", deleted)
+	}
+
+	list, err := store.ListByUser(context.Background(), "u")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("expected reminder to be deleted, got %+v", list)
 	}
 }
 
@@ -76,6 +114,12 @@ func TestNextAfter(t *testing.T) {
 	if err != nil || rep || !next.IsZero() {
 		t.Fatalf("once: next=%v rep=%v err=%v", next, rep, err)
 	}
+
+	cronReminder := Reminder{Schedule: ScheduleDaily, CronExpr: "0 12 * * *", Timezone: "UTC"}
+	next, rep, err = NextAfter(cronReminder, now)
+	if err != nil || !rep || !(next.After(now) && next.Hour() == 12 && next.Minute() == 0) {
+		t.Fatalf("cron: next=%v rep=%v err=%v", next, rep, err)
+	}
 }
 
 func TestNextRunForScheduleOnceRelative(t *testing.T) {
@@ -91,7 +135,7 @@ func TestNextRunForScheduleOnceRelative(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got, atTime, err := nextRunForSchedule(now, ScheduleOnce, tt.at)
+		got, atTime, err := legacyNextRunForSchedule(now, ScheduleOnce, tt.at)
 		if err != nil {
 			t.Fatalf("nextRunForSchedule(%q): %v", tt.at, err)
 		}
@@ -101,5 +145,28 @@ func TestNextRunForScheduleOnceRelative(t *testing.T) {
 		if !atTime.Valid || atTime.String != tt.want.Format(time.RFC3339) {
 			t.Fatalf("at_time for %q = %+v, want %s", tt.at, atTime, tt.want.Format(time.RFC3339))
 		}
+	}
+}
+
+func TestNormalizeScheduleUsesTimezone(t *testing.T) {
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	got, err := normalizeSchedule(now, normalizeInput{
+		Schedule: ScheduleDaily,
+		At:       "09:00",
+		Timezone: "Asia/Kolkata",
+	})
+	if err != nil {
+		t.Fatalf("normalizeSchedule: %v", err)
+	}
+	if got.Timezone != "Asia/Kolkata" {
+		t.Fatalf("timezone = %q, want Asia/Kolkata", got.Timezone)
+	}
+	if got.CronExpr != "0 9 * * *" {
+		t.Fatalf("cron = %q, want 0 9 * * *", got.CronExpr)
+	}
+	want := time.Date(2026, 1, 1, 3, 30, 0, 0, time.UTC)
+	if !got.NextRun.Equal(want) {
+		t.Fatalf("next_run = %v, want %v", got.NextRun, want)
 	}
 }

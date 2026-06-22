@@ -10,9 +10,9 @@ import (
 )
 
 const createReminder = `-- name: CreateReminder :one
-INSERT INTO reminders(user_id, channel_id, guild_id, message, schedule, at_time, next_run, created_at, updated_at)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, user_id, channel_id, guild_id, message, schedule, at_time, next_run, created_at, updated_at
+INSERT INTO reminders(user_id, channel_id, guild_id, message, schedule, at_time, cron_expr, once, timezone, next_run, created_at, updated_at)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, user_id, channel_id, guild_id, message, schedule, at_time, cron_expr, once, timezone, next_run, created_at, updated_at
 `
 
 type CreateReminderParams struct {
@@ -22,12 +22,31 @@ type CreateReminderParams struct {
 	Message   string  `json:"message"`
 	Schedule  string  `json:"schedule"`
 	AtTime    *string `json:"at_time"`
+	CronExpr  string  `json:"cron_expr"`
+	Once      int64   `json:"once"`
+	Timezone  string  `json:"timezone"`
 	NextRun   int64   `json:"next_run"`
 	CreatedAt int64   `json:"created_at"`
 	UpdatedAt int64   `json:"updated_at"`
 }
 
-func (q *Queries) CreateReminder(ctx context.Context, db DBTX, arg CreateReminderParams) (Reminder, error) {
+type CreateReminderRow struct {
+	ID        int64   `json:"id"`
+	UserID    string  `json:"user_id"`
+	ChannelID string  `json:"channel_id"`
+	GuildID   *string `json:"guild_id"`
+	Message   string  `json:"message"`
+	Schedule  string  `json:"schedule"`
+	AtTime    *string `json:"at_time"`
+	CronExpr  string  `json:"cron_expr"`
+	Once      int64   `json:"once"`
+	Timezone  string  `json:"timezone"`
+	NextRun   int64   `json:"next_run"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
+}
+
+func (q *Queries) CreateReminder(ctx context.Context, db DBTX, arg CreateReminderParams) (CreateReminderRow, error) {
 	row := db.QueryRowContext(ctx, createReminder,
 		arg.UserID,
 		arg.ChannelID,
@@ -35,11 +54,14 @@ func (q *Queries) CreateReminder(ctx context.Context, db DBTX, arg CreateReminde
 		arg.Message,
 		arg.Schedule,
 		arg.AtTime,
+		arg.CronExpr,
+		arg.Once,
+		arg.Timezone,
 		arg.NextRun,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
-	var i Reminder
+	var i CreateReminderRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
@@ -48,6 +70,9 @@ func (q *Queries) CreateReminder(ctx context.Context, db DBTX, arg CreateReminde
 		&i.Message,
 		&i.Schedule,
 		&i.AtTime,
+		&i.CronExpr,
+		&i.Once,
+		&i.Timezone,
 		&i.NextRun,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -76,22 +101,81 @@ func (q *Queries) DeleteOwned(ctx context.Context, db DBTX, iD int64, userID str
 	return result.RowsAffected()
 }
 
+const getOwned = `-- name: GetOwned :one
+SELECT id, user_id, channel_id, guild_id, message, schedule, at_time, cron_expr, once, timezone, next_run, created_at, updated_at
+FROM reminders
+WHERE id = ? AND user_id = ?
+`
+
+type GetOwnedRow struct {
+	ID        int64   `json:"id"`
+	UserID    string  `json:"user_id"`
+	ChannelID string  `json:"channel_id"`
+	GuildID   *string `json:"guild_id"`
+	Message   string  `json:"message"`
+	Schedule  string  `json:"schedule"`
+	AtTime    *string `json:"at_time"`
+	CronExpr  string  `json:"cron_expr"`
+	Once      int64   `json:"once"`
+	Timezone  string  `json:"timezone"`
+	NextRun   int64   `json:"next_run"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
+}
+
+func (q *Queries) GetOwned(ctx context.Context, db DBTX, iD int64, userID string) (GetOwnedRow, error) {
+	row := db.QueryRowContext(ctx, getOwned, iD, userID)
+	var i GetOwnedRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ChannelID,
+		&i.GuildID,
+		&i.Message,
+		&i.Schedule,
+		&i.AtTime,
+		&i.CronExpr,
+		&i.Once,
+		&i.Timezone,
+		&i.NextRun,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listByUser = `-- name: ListByUser :many
-SELECT id, user_id, channel_id, guild_id, message, schedule, at_time, next_run, created_at, updated_at
+SELECT id, user_id, channel_id, guild_id, message, schedule, at_time, cron_expr, once, timezone, next_run, created_at, updated_at
 FROM reminders
 WHERE user_id = ?
 ORDER BY next_run ASC
 `
 
-func (q *Queries) ListByUser(ctx context.Context, db DBTX, userID string) ([]Reminder, error) {
+type ListByUserRow struct {
+	ID        int64   `json:"id"`
+	UserID    string  `json:"user_id"`
+	ChannelID string  `json:"channel_id"`
+	GuildID   *string `json:"guild_id"`
+	Message   string  `json:"message"`
+	Schedule  string  `json:"schedule"`
+	AtTime    *string `json:"at_time"`
+	CronExpr  string  `json:"cron_expr"`
+	Once      int64   `json:"once"`
+	Timezone  string  `json:"timezone"`
+	NextRun   int64   `json:"next_run"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
+}
+
+func (q *Queries) ListByUser(ctx context.Context, db DBTX, userID string) ([]ListByUserRow, error) {
 	rows, err := db.QueryContext(ctx, listByUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Reminder
+	var items []ListByUserRow
 	for rows.Next() {
-		var i Reminder
+		var i ListByUserRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -100,6 +184,9 @@ func (q *Queries) ListByUser(ctx context.Context, db DBTX, userID string) ([]Rem
 			&i.Message,
 			&i.Schedule,
 			&i.AtTime,
+			&i.CronExpr,
+			&i.Once,
+			&i.Timezone,
 			&i.NextRun,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -118,22 +205,38 @@ func (q *Queries) ListByUser(ctx context.Context, db DBTX, userID string) ([]Rem
 }
 
 const listDue = `-- name: ListDue :many
-SELECT id, user_id, channel_id, guild_id, message, schedule, at_time, next_run, created_at, updated_at
+SELECT id, user_id, channel_id, guild_id, message, schedule, at_time, cron_expr, once, timezone, next_run, created_at, updated_at
 FROM reminders
 WHERE next_run <= ?
 ORDER BY next_run ASC
 LIMIT ?
 `
 
-func (q *Queries) ListDue(ctx context.Context, db DBTX, nextRun int64, limit int64) ([]Reminder, error) {
+type ListDueRow struct {
+	ID        int64   `json:"id"`
+	UserID    string  `json:"user_id"`
+	ChannelID string  `json:"channel_id"`
+	GuildID   *string `json:"guild_id"`
+	Message   string  `json:"message"`
+	Schedule  string  `json:"schedule"`
+	AtTime    *string `json:"at_time"`
+	CronExpr  string  `json:"cron_expr"`
+	Once      int64   `json:"once"`
+	Timezone  string  `json:"timezone"`
+	NextRun   int64   `json:"next_run"`
+	CreatedAt int64   `json:"created_at"`
+	UpdatedAt int64   `json:"updated_at"`
+}
+
+func (q *Queries) ListDue(ctx context.Context, db DBTX, nextRun int64, limit int64) ([]ListDueRow, error) {
 	rows, err := db.QueryContext(ctx, listDue, nextRun, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Reminder
+	var items []ListDueRow
 	for rows.Next() {
-		var i Reminder
+		var i ListDueRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -142,6 +245,9 @@ func (q *Queries) ListDue(ctx context.Context, db DBTX, nextRun int64, limit int
 			&i.Message,
 			&i.Schedule,
 			&i.AtTime,
+			&i.CronExpr,
+			&i.Once,
+			&i.Timezone,
 			&i.NextRun,
 			&i.CreatedAt,
 			&i.UpdatedAt,

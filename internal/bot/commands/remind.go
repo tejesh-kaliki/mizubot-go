@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"mizubot-go/internal/reminders"
+	"mizubot-go/internal/usersettings"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -18,18 +19,23 @@ const (
 )
 
 type RemindModule struct {
-	service *reminders.Service
+	service         *reminders.Service
+	settingsService *usersettings.Service
 }
 
-func NewRemindModule(service *reminders.Service) *RemindModule {
-	return &RemindModule{service: service}
+func NewRemindModule(service *reminders.Service, settingsService ...*usersettings.Service) *RemindModule {
+	var settings *usersettings.Service
+	if len(settingsService) > 0 {
+		settings = settingsService[0]
+	}
+	return &RemindModule{service: service, settingsService: settings}
 }
 
 func (m *RemindModule) Definitions() []*discordgo.ApplicationCommand {
 	return []*discordgo.ApplicationCommand{
 		{
 			Name:        "remind",
-			Description: "Create and manage reminders (times are in UTC)",
+			Description: "Create and manage reminders",
 			Options: []*discordgo.ApplicationCommandOption{
 				{
 					Type:        discordgo.ApplicationCommandOptionSubCommand,
@@ -116,6 +122,7 @@ func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCr
 		responder.Respond(i, "Unable to identify the user for this reminder.", true)
 		return
 	}
+	timezone := m.userTimezone(context.Background(), userID)
 
 	reminder, err := m.service.CreateReminder(context.Background(), reminders.CreateReminderInput{
 		UserID:    userID,
@@ -124,6 +131,7 @@ func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCr
 		Message:   message,
 		Schedule:  scheduleStr,
 		At:        at,
+		Timezone:  timezone,
 	})
 	if err != nil {
 		responder.Respond(i, err.Error(), true)
@@ -137,11 +145,24 @@ func (m *RemindModule) handleAdd(responder Responder, i *discordgo.InteractionCr
 			{Name: "ID", Value: fmt.Sprintf("%d", reminder.ID), Inline: true},
 			{Name: "Schedule", Value: string(reminder.Schedule), Inline: true},
 			{Name: "Channel", Value: renderChannelOrFallback(reminder.ChannelID, "Current channel"), Inline: true},
+			{Name: "Timezone", Value: "`" + reminder.Timezone + "`", Inline: true},
 			{Name: "Next Run", Value: formatReminderTime(reminder.NextRun), Inline: false},
 			{Name: "Message", Value: trimForField(reminder.Message, 900), Inline: false},
 		},
 		Footer: &discordgo.MessageEmbedFooter{Text: "Reminder delivery will mention you only"},
 	}, true)
+}
+
+func (m *RemindModule) userTimezone(ctx context.Context, userID string) string {
+	if m.settingsService == nil {
+		return usersettings.DefaultTimezone
+	}
+	timezone, _, err := m.settingsService.GetTimezone(ctx, userID)
+	if err != nil {
+		log.Printf("load user timezone error: user_id=%s error=%v", userID, err)
+		return usersettings.DefaultTimezone
+	}
+	return timezone
 }
 
 func (m *RemindModule) handleList(responder Responder, i *discordgo.InteractionCreate) {
@@ -220,7 +241,7 @@ func (m *RemindModule) handleDelete(responder Responder, i *discordgo.Interactio
 		return
 	}
 
-	ok, err := m.service.DeleteReminder(context.Background(), id, userID)
+	deleted, ok, err := m.service.DeleteReminderWithDetails(context.Background(), id, userID)
 	if err != nil {
 		log.Printf("delete reminder error: %v", err)
 		responder.Respond(i, "Failed to delete.", true)
@@ -235,6 +256,11 @@ func (m *RemindModule) handleDelete(responder Responder, i *discordgo.Interactio
 		Color: reminderEmbedColor,
 		Fields: []*discordgo.MessageEmbedField{
 			{Name: "ID", Value: fmt.Sprintf("%d", id), Inline: true},
+			{Name: "Repeat", Value: formatReminderRepeat(deleted), Inline: true},
+			{Name: "Timezone", Value: "`" + deleted.Timezone + "`", Inline: true},
+			{Name: "Next Run", Value: formatReminderTime(deleted.NextRun), Inline: false},
+			{Name: "Channel", Value: renderChannelOrFallback(deleted.ChannelID, "Unknown"), Inline: true},
+			{Name: "Message", Value: trimForField(deleted.Message, 900), Inline: false},
 		},
 	}, true)
 }
@@ -253,6 +279,8 @@ func formatReminderListEntry(r reminders.Reminder) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Next: %s", formatReminderTime(r.NextRun))
 	b.WriteString("\n")
+	fmt.Fprintf(&b, "Timezone: %s", r.Timezone)
+	b.WriteString("\n")
 	fmt.Fprintf(&b, "Channel: %s", renderChannelOrFallback(r.ChannelID, "Unknown"))
 	b.WriteString("\n")
 	fmt.Fprintf(&b, "Message: %s", trimForField(r.Message, 220))
@@ -261,4 +289,20 @@ func formatReminderListEntry(r reminders.Reminder) string {
 
 func formatReminderTime(t time.Time) string {
 	return fmt.Sprintf("<t:%d:F> (<t:%d:R>)", t.UTC().Unix(), t.UTC().Unix())
+}
+
+func formatReminderRepeat(r reminders.Reminder) string {
+	if r.Once {
+		return "once"
+	}
+	switch r.Schedule {
+	case reminders.ScheduleHourly:
+		return "hourly"
+	case reminders.ScheduleDaily:
+		return "daily"
+	case reminders.ScheduleCron:
+		return "custom"
+	default:
+		return string(r.Schedule)
+	}
 }

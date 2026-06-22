@@ -18,6 +18,7 @@ import (
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 	"mizubot-go/internal/scheduler"
+	"mizubot-go/internal/usersettings"
 )
 
 func main() {
@@ -47,6 +48,8 @@ func main() {
 
 	store := reminders.NewStore(database)
 	reminderService := reminders.NewService(store)
+	userSettingsStore := usersettings.NewStore(database)
+	userSettingsService := usersettings.NewService(userSettingsStore)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -76,9 +79,12 @@ func main() {
 		BaseURL: cfg.OllamaBaseURL,
 		Model:   cfg.OllamaModel,
 		Timeout: cfg.OllamaTimeout,
-	}), llmtools.NewReminderTools(reminderService)...)
+	}), append(
+		llmtools.NewReminderTools(reminderService, userSettingsService),
+		llmtools.NewUserSettingsTools(userSettingsService)...,
+	)...)
 
-	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService)
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}

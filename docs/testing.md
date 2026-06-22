@@ -9,6 +9,16 @@
   - Scheduling: `NextAfter` for once/hourly/daily
   - Scheduler: sends due reminders and reschedules
 
+### LLM evals
+
+The LLM evals are deterministic unit tests with fake model responses. They validate tool orchestration, reminder tool argument shape, tool-loop behavior, and final reminder response formatting without calling Ollama.
+
+Run only LLM evals:
+
+```bash
+go test ./internal/llm -run Eval
+```
+
 ### Manual testing with a test bot
 
 - Recommended config:
@@ -61,5 +71,4 @@ go run ./cmd/mizubot -config ./config.prod.yaml
 # test
 go run ./cmd/mizubot -config ./config.test.yaml
 ```
-
 
