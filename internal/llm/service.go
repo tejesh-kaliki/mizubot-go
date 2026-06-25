@@ -14,6 +14,7 @@ const maxToolIterations = 4
 type Message struct {
 	UserID    string
 	Username  string
+	BotName   string
 	ChannelID string
 	GuildID   string
 	Content   string
@@ -414,7 +415,7 @@ func parseToolDecision(raw string) (toolDecision, bool) {
 }
 
 func (s *Service) buildSystemPrompt(ctx context.Context, message Message) (string, error) {
-	prompt := buildSystemPrompt()
+	prompt := buildSystemPrompt(message.BotName)
 	if s.guildInstructionProvider == nil {
 		return prompt, nil
 	}

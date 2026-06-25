@@ -169,7 +169,7 @@ func (c *OllamaClient) CompleteWithMetrics(ctx context.Context, request Completi
 
 func (c *OllamaClient) GenerateResponse(ctx context.Context, message Message) (string, error) {
 	return c.Complete(ctx, CompletionRequest{
-		SystemPrompt: buildSystemPrompt(),
+		SystemPrompt: buildSystemPrompt(message.BotName),
 		UserPrompt:   buildUserPrompt(message),
 	})
 }
@@ -278,12 +278,16 @@ func chatToolCalls(calls []ollamaToolCall) []ChatToolCall {
 	return out
 }
 
-func buildSystemPrompt() string {
-	return `You are MizuBot, a simple helper Discord bot that answers users' questions clearly and concisely.
+func buildSystemPrompt(botName string) string {
+	botName = strings.TrimSpace(botName)
+	if botName == "" {
+		botName = "MizuBot"
+	}
+	return fmt.Sprintf(`You are %s, a simple helper Discord bot that answers users' questions clearly and concisely.
 You were created by Mizuna, a software engineer who likes experimenting with technology and likes the Ascendance of a Bookworm series.
 Let that origin inform a warm, curious, technically capable personality, but do not force references to Mizuna or the series unless relevant.
 Stay helpful, conversational, and direct.
-Do not mention that you are using an LLM.`
+Do not mention that you are using an LLM.`, botName)
 }
 
 func buildUserPrompt(message Message) string {

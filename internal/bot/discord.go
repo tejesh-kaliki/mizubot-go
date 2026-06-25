@@ -239,10 +239,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		timezone := b.userTimezoneForMessage(ctx, m.Author.ID)
 		generated, err := b.llm.GenerateResponseWithMetrics(ctx, llm.Message{
 			UserID:    m.Author.ID,
-			Username:  m.Author.Username,
+			Username:  guildDisplayName(s, m.GuildID, m.Author, m.Member),
+			BotName:   guildDisplayName(s, m.GuildID, s.State.User, nil),
 			ChannelID: m.ChannelID,
 			GuildID:   m.GuildID,
-			Content:   stripUserMention(m.Content, s.State.User.ID),
+			Content:   messageTextWithDisplayNames(s, m.Message),
 			Timezone:  timezone,
 			Now:       startedAt,
 		})
@@ -377,10 +378,37 @@ func messageMentionsUser(content, userID string) bool {
 	return strings.Contains(content, "<@"+userID+">") || strings.Contains(content, "<@!"+userID+">")
 }
 
-func stripUserMention(content, userID string) string {
-	content = strings.ReplaceAll(content, "<@"+userID+">", "")
-	content = strings.ReplaceAll(content, "<@!"+userID+">", "")
+func messageTextWithDisplayNames(s *discordgo.Session, message *discordgo.Message) string {
+	if message == nil {
+		return ""
+	}
+	content := message.Content
+	for _, user := range message.Mentions {
+		if user == nil || user.ID == "" {
+			continue
+		}
+		name := guildDisplayName(s, message.GuildID, user, nil)
+		content = strings.NewReplacer(
+			"<@"+user.ID+">", "@"+name,
+			"<@!"+user.ID+">", "@"+name,
+		).Replace(content)
+	}
 	return strings.TrimSpace(content)
+}
+
+func guildDisplayName(s *discordgo.Session, guildID string, user *discordgo.User, member *discordgo.Member) string {
+	if member != nil && strings.TrimSpace(member.Nick) != "" {
+		return strings.TrimSpace(member.Nick)
+	}
+	if s != nil && s.State != nil && guildID != "" && user != nil {
+		if guildMember, err := s.State.Member(guildID, user.ID); err == nil && strings.TrimSpace(guildMember.Nick) != "" {
+			return strings.TrimSpace(guildMember.Nick)
+		}
+	}
+	if user != nil && strings.TrimSpace(user.Username) != "" {
+		return strings.TrimSpace(user.Username)
+	}
+	return "Discord user"
 }
 
 func splitDiscordMessages(content string) []string {

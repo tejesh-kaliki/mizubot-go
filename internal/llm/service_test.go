@@ -256,6 +256,21 @@ func TestServiceGenerateResponseAddsMatchingGuildInstructions(t *testing.T) {
 	}
 }
 
+func TestServiceUsesServerBotNameInSystemPrompt(t *testing.T) {
+	completer := &fakeCompleter{responses: []string{"answer"}}
+	service := NewService(completer)
+
+	if _, err := service.GenerateResponse(context.Background(), Message{
+		BotName: "Mizu Helper",
+		Content: "hello",
+	}); err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if !strings.Contains(completer.requests[0].SystemPrompt, "You are Mizu Helper,") {
+		t.Fatalf("system prompt missing server bot name: %q", completer.requests[0].SystemPrompt)
+	}
+}
+
 func TestServiceGenerateResponseSkipsOtherGuildInstructions(t *testing.T) {
 	completer := &fakeCompleter{responses: []string{"answer"}}
 	service := NewServiceWithGuildInstructions(completer, map[string]string{

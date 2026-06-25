@@ -57,6 +57,44 @@ func TestMessageMentionsUser(t *testing.T) {
 	}
 }
 
+func TestMessageTextWithDisplayNamesPreservesMentionsAsNames(t *testing.T) {
+	state := discordgo.NewState()
+	if err := state.GuildAdd(&discordgo.Guild{
+		ID: "guild",
+		Members: []*discordgo.Member{
+			{User: &discordgo.User{ID: "bot", Username: "MizuBot"}, Nick: "Mizu"},
+			{User: &discordgo.User{ID: "user", Username: "account-name"}, Nick: "Server Name"},
+			{User: &discordgo.User{ID: "other-bot", Username: "helper"}, Nick: "Helper Bot"},
+		},
+	}); err != nil {
+		t.Fatalf("GuildAdd: %v", err)
+	}
+	session := &discordgo.Session{State: state}
+	message := &discordgo.Message{
+		GuildID: "guild",
+		Content: "<@bot> ask <@!user> and <@other-bot>",
+		Mentions: []*discordgo.User{
+			{ID: "bot", Username: "MizuBot", Bot: true},
+			{ID: "user", Username: "account-name"},
+			{ID: "other-bot", Username: "helper", Bot: true},
+		},
+	}
+
+	got := messageTextWithDisplayNames(session, message)
+	if got != "@Mizu ask @Server Name and @Helper Bot" {
+		t.Fatalf("message text = %q", got)
+	}
+}
+
+func TestGuildDisplayNameUsesMessageMemberNickname(t *testing.T) {
+	user := &discordgo.User{ID: "user", Username: "account-name"}
+	member := &discordgo.Member{User: user, Nick: "Server Name"}
+
+	if got := guildDisplayName(nil, "guild", user, member); got != "Server Name" {
+		t.Fatalf("display name = %q, want Server Name", got)
+	}
+}
+
 func TestSplitDiscordMessages(t *testing.T) {
 	short := splitDiscordMessages(" hello ")
 	if len(short) != 1 || short[0] != "hello" {
