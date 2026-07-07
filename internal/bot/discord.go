@@ -237,6 +237,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		log.Printf("generating llm response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
 		startedAt := time.Now()
 		timezone := b.userTimezoneForMessage(ctx, m.Author.ID)
+		history := buildConversationHistory(s, s, m.Message)
 		generated, err := b.llm.GenerateResponseWithMetrics(ctx, llm.Message{
 			UserID:    m.Author.ID,
 			Username:  guildDisplayName(s, m.GuildID, m.Author, m.Member),
@@ -246,6 +247,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			Content:   messageTextWithDisplayNames(s, m.Message),
 			Timezone:  timezone,
 			Now:       startedAt,
+			History:   history,
 		})
 		latency := time.Since(startedAt)
 		if err != nil {
