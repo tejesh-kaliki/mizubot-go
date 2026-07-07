@@ -235,7 +235,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	if m.Author.ID == s.State.User.ID || m.Content == "" {
 		return
 	}
-	if !messageMentionsUser(m.Content, s.State.User.ID) {
+	if !shouldTriggerLLM(s, m.Message) {
 		return
 	}
 	if b.dryRun {

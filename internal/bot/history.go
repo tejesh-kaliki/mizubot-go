@@ -41,6 +41,33 @@ func isReply(msg *discordgo.Message) bool {
 	return msg.MessageReference != nil && msg.MessageReference.MessageID != ""
 }
 
+// isReplyToBot reports whether msg is a reply to a message authored by this
+// bot. Discord's reply UI doesn't insert mention text into Content, so
+// relying on messageMentionsUser alone would miss a user replying to the
+// bot without also typing an explicit @mention.
+func isReplyToBot(s *discordgo.Session, msg *discordgo.Message) bool {
+	if !isReply(msg) || msg.ReferencedMessage == nil || msg.ReferencedMessage.Author == nil {
+		return false
+	}
+	if s == nil || s.State == nil || s.State.User == nil {
+		return false
+	}
+	return msg.ReferencedMessage.Author.ID == s.State.User.ID
+}
+
+// shouldTriggerLLM reports whether msg should prompt an LLM response: either
+// an explicit @mention of this bot, or a reply to one of this bot's own
+// messages.
+func shouldTriggerLLM(s *discordgo.Session, msg *discordgo.Message) bool {
+	if s == nil || s.State == nil || s.State.User == nil {
+		return false
+	}
+	if messageMentionsUser(msg.Content, s.State.User.ID) {
+		return true
+	}
+	return isReplyToBot(s, msg)
+}
+
 // historySourcePath reports which strategy buildConversationHistory used for
 // msg, for logging purposes.
 func historySourcePath(msg *discordgo.Message) string {

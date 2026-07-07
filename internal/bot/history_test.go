@@ -75,6 +75,96 @@ func TestIsReplyDetection(t *testing.T) {
 	}
 }
 
+func TestIsReplyToBot(t *testing.T) {
+	s := newTestSession("bot1")
+
+	if isReplyToBot(s, &discordgo.Message{Content: "hi"}) {
+		t.Fatalf("non-reply message should not count as a reply to the bot")
+	}
+
+	replyToOtherUser := &discordgo.Message{
+		Content:           "thanks!",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: &discordgo.Message{ID: "m1", Author: &discordgo.User{ID: "user2"}},
+	}
+	if isReplyToBot(s, replyToOtherUser) {
+		t.Fatalf("reply to another user's message should not count as a reply to the bot")
+	}
+
+	replyToBot := &discordgo.Message{
+		Content:           "and what about this?",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: &discordgo.Message{ID: "m1", Author: &discordgo.User{ID: "bot1"}},
+	}
+	if !isReplyToBot(s, replyToBot) {
+		t.Fatalf("reply to the bot's own message should count as a reply to the bot")
+	}
+
+	unresolvedReply := &discordgo.Message{
+		Content:          "unresolved",
+		MessageReference: &discordgo.MessageReference{MessageID: "m1"},
+	}
+	if isReplyToBot(s, unresolvedReply) {
+		t.Fatalf("reply with no resolved ReferencedMessage should not be assumed to target the bot")
+	}
+}
+
+func TestShouldTriggerLLM(t *testing.T) {
+	s := newTestSession("bot1")
+
+	mentionMsg := &discordgo.Message{Content: "<@bot1> hello"}
+	if !shouldTriggerLLM(s, mentionMsg) {
+		t.Fatalf("explicit mention should trigger the LLM")
+	}
+
+	replyNoMention := &discordgo.Message{
+		Content:           "no mention text here, just a reply",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: &discordgo.Message{ID: "m1", Author: &discordgo.User{ID: "bot1"}},
+	}
+	if !shouldTriggerLLM(s, replyNoMention) {
+		t.Fatalf("reply to the bot's message with no explicit mention should still trigger the LLM")
+	}
+
+	replyToOtherUserNoMention := &discordgo.Message{
+		Content:           "no mention text here either",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: &discordgo.Message{ID: "m1", Author: &discordgo.User{ID: "user2"}},
+	}
+	if shouldTriggerLLM(s, replyToOtherUserNoMention) {
+		t.Fatalf("reply to another user with no mention should not trigger the LLM")
+	}
+
+	plainMsg := &discordgo.Message{Content: "just chatting, no mention or reply"}
+	if shouldTriggerLLM(s, plainMsg) {
+		t.Fatalf("plain message with no mention or reply-to-bot should not trigger the LLM")
+	}
+}
+
+func TestReplyToBotWithoutMentionTriggersAndUsesReplyChainHistory(t *testing.T) {
+	s := newTestSession("bot1")
+	botReply := &discordgo.Message{ID: "botmsg", ChannelID: "chan1", GuildID: "guild1", Content: "here's the answer", Author: &discordgo.User{ID: "bot1", Username: "mizubot"}}
+	userReply := &discordgo.Message{
+		ID: "current", ChannelID: "chan1", GuildID: "guild1", Content: "and what about tomorrow?",
+		Author:            &discordgo.User{ID: "user1", Username: "account1"},
+		MessageReference:  &discordgo.MessageReference{ChannelID: "chan1", MessageID: "botmsg"},
+		ReferencedMessage: botReply,
+	}
+
+	if !shouldTriggerLLM(s, userReply) {
+		t.Fatalf("reply to the bot's own message without an explicit mention should trigger the LLM")
+	}
+
+	fetcher := &stubHistoryFetcher{}
+	history := buildConversationHistory(s, fetcher, userReply)
+	if len(history) != 1 || history[0].Content != "here's the answer" || !history[0].IsBot {
+		t.Fatalf("expected reply-chain history to include the bot's prior message, got %#v", history)
+	}
+	if len(fetcher.channelMessagesCalls) != 0 {
+		t.Fatalf("reply should use the reply-chain path, not the channel buffer, got calls: %#v", fetcher.channelMessagesCalls)
+	}
+}
+
 func TestBuildConversationHistoryUsesReplyChainWhenReply(t *testing.T) {
 	s := newTestSession("bot1")
 
