@@ -21,6 +21,10 @@ ollama:
 env: "test"            # or "prod"
 test_guild_id: "123456789012345678"
 dry_run: true          # log sends instead of posting
+# Optional: logs the conversation history path (reply-chain vs channel-buffer),
+# message count, and each history message (author + truncated content) sent
+# to the LLM for every request. Off by default to avoid log spam.
+llm_debug_history: false
 # Optional: seeded into the guild_instructions DB table at startup.
 guild_instructions:
   "123456789012345678": |

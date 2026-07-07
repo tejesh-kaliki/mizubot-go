@@ -95,6 +95,7 @@ func main() {
 	}
 	// Enable dry-run if requested (no actual sends)
 	discordBot.SetDryRun(cfg.DryRun)
+	discordBot.SetDebugHistory(cfg.LLMDebugHistory)
 
 	if err := discordBot.Open(); err != nil {
 		log.Fatalf("discord open error: %v", err)

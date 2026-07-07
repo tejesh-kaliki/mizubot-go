@@ -29,6 +29,7 @@ type Config struct {
 	OllamaModel            string
 	OllamaTimeout          time.Duration
 	GuildInstructions      map[string]string
+	LLMDebugHistory        bool
 }
 
 type fileConfig struct {
@@ -42,6 +43,7 @@ type fileConfig struct {
 	DryRun            bool              `yaml:"dry_run"`
 	Ollama            ollamaFileConfig  `yaml:"ollama"`
 	GuildInstructions map[string]string `yaml:"guild_instructions"`
+	LLMDebugHistory   bool              `yaml:"llm_debug_history"`
 }
 
 type animeFileConfig struct {
@@ -108,6 +110,7 @@ type envVals struct {
 	OllamaBaseURL          string
 	OllamaModel            string
 	OllamaTimeout          string
+	LLMDebugHistory        string
 }
 
 func osEnv() envVals {
@@ -130,6 +133,7 @@ func osEnv() envVals {
 		OllamaBaseURL:          os.Getenv("OLLAMA_BASE_URL"),
 		OllamaModel:            os.Getenv("OLLAMA_MODEL"),
 		OllamaTimeout:          os.Getenv("OLLAMA_TIMEOUT"),
+		LLMDebugHistory:        os.Getenv("LLM_DEBUG_HISTORY"),
 	}
 }
 
@@ -166,6 +170,11 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		dry = true
 	}
 
+	llmDebugHistory := f.LLMDebugHistory
+	if e.LLMDebugHistory == "1" || e.LLMDebugHistory == "true" || e.LLMDebugHistory == "TRUE" {
+		llmDebugHistory = true
+	}
+
 	ollamaTimeoutStr := fallback(e.OllamaTimeout, f.Ollama.Timeout, "60s")
 	ollamaTimeout := time.Minute
 	if d, err := time.ParseDuration(ollamaTimeoutStr); err == nil {
@@ -193,6 +202,7 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		OllamaModel:            fallback(e.OllamaModel, f.Ollama.Model, "llama3.2"),
 		OllamaTimeout:          ollamaTimeout,
 		GuildInstructions:      f.GuildInstructions,
+		LLMDebugHistory:        llmDebugHistory,
 	}, nil
 }
 

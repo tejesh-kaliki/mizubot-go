@@ -41,6 +41,7 @@ type Bot struct {
 	registrar    CommandRegistrar
 	modules      []commands.Module
 	dryRun       bool
+	debugHistory bool
 	llm          *llm.Service
 	llmLogger    llmMessageLogger
 	userSettings *usersettings.Service
@@ -196,6 +197,10 @@ func (b *Bot) RegisterCommandsForGuild(guildID string) error {
 
 func (b *Bot) SetDryRun(d bool) { b.dryRun = d }
 
+// SetDebugHistory toggles verbose logging of the conversation history
+// (path used, message count, and each history entry) built for LLM requests.
+func (b *Bot) SetDebugHistory(d bool) { b.debugHistory = d }
+
 func (b *Bot) commandDefinitions() []*discordgo.ApplicationCommand {
 	defs := make([]*discordgo.ApplicationCommand, 0, len(b.modules))
 	for _, module := range b.modules {
@@ -238,6 +243,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		startedAt := time.Now()
 		timezone := b.userTimezoneForMessage(ctx, m.Author.ID)
 		history := buildConversationHistory(s, s, m.Message)
+		debugLogHistory(b.debugHistory, m.ChannelID, m.ID, historySourcePath(m.Message), history)
 		generated, err := b.llm.GenerateResponseWithMetrics(ctx, llm.Message{
 			UserID:    m.Author.ID,
 			Username:  guildDisplayName(s, m.GuildID, m.Author, m.Member),

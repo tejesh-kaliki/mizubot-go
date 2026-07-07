@@ -1,8 +1,12 @@
 package bot
 
 import (
+	"bytes"
+	"log"
 	"strings"
 	"testing"
+
+	"mizubot-go/internal/llm"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -222,5 +226,77 @@ func TestHistoryMessagesFromDiscordTruncatesLongContent(t *testing.T) {
 func TestBuildConversationHistoryHandlesNilFetcher(t *testing.T) {
 	if got := buildConversationHistory(nil, nil, &discordgo.Message{ID: "m1"}); got != nil {
 		t.Fatalf("expected nil history with nil fetcher, got %#v", got)
+	}
+}
+
+func TestHistorySourcePath(t *testing.T) {
+	if got := historySourcePath(&discordgo.Message{}); got != "channel-buffer" {
+		t.Fatalf("historySourcePath = %q, want channel-buffer", got)
+	}
+	replyMsg := &discordgo.Message{MessageReference: &discordgo.MessageReference{MessageID: "123"}}
+	if got := historySourcePath(replyMsg); got != "reply-chain" {
+		t.Fatalf("historySourcePath = %q, want reply-chain", got)
+	}
+}
+
+func captureLogOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	orig := log.Writer()
+	origFlags := log.Flags()
+	log.SetOutput(&buf)
+	log.SetFlags(0)
+	defer func() {
+		log.SetOutput(orig)
+		log.SetFlags(origFlags)
+	}()
+	fn()
+	return buf.String()
+}
+
+func TestDebugLogHistorySkipsWhenDisabled(t *testing.T) {
+	out := captureLogOutput(t, func() {
+		debugLogHistory(false, "chan1", "msg1", "reply-chain", []llm.HistoryMessage{
+			{Author: "Alice", Content: "hello"},
+		})
+	})
+	if out != "" {
+		t.Fatalf("expected no log output when disabled, got %q", out)
+	}
+}
+
+func TestDebugLogHistoryLogsPathCountAndMessagesWhenEnabled(t *testing.T) {
+	out := captureLogOutput(t, func() {
+		debugLogHistory(true, "chan1", "msg1", "reply-chain", []llm.HistoryMessage{
+			{Author: "Alice", Content: "hello there", IsBot: false},
+			{Author: "MizuBot", Content: "hi Alice", IsBot: true},
+		})
+	})
+	if !strings.Contains(out, "path=reply-chain") {
+		t.Fatalf("log output missing path: %q", out)
+	}
+	if !strings.Contains(out, "count=2") {
+		t.Fatalf("log output missing count: %q", out)
+	}
+	if !strings.Contains(out, "author=Alice") || !strings.Contains(out, "hello there") {
+		t.Fatalf("log output missing first history entry: %q", out)
+	}
+	if !strings.Contains(out, "role=bot") || !strings.Contains(out, "hi Alice") {
+		t.Fatalf("log output missing second history entry marked as bot: %q", out)
+	}
+}
+
+func TestDebugLogHistoryTruncatesLongContent(t *testing.T) {
+	longContent := strings.Repeat("x", maxDebugHistoryContentChars+100)
+	out := captureLogOutput(t, func() {
+		debugLogHistory(true, "chan1", "msg1", "channel-buffer", []llm.HistoryMessage{
+			{Author: "Alice", Content: longContent},
+		})
+	})
+	if strings.Contains(out, longContent) {
+		t.Fatalf("expected log output to truncate long content")
+	}
+	if !strings.Contains(out, "…") {
+		t.Fatalf("expected truncated content to end with ellipsis: %q", out)
 	}
 }

@@ -41,6 +41,35 @@ func isReply(msg *discordgo.Message) bool {
 	return msg.MessageReference != nil && msg.MessageReference.MessageID != ""
 }
 
+// historySourcePath reports which strategy buildConversationHistory used for
+// msg, for logging purposes.
+func historySourcePath(msg *discordgo.Message) string {
+	if isReply(msg) {
+		return "reply-chain"
+	}
+	return "channel-buffer"
+}
+
+const maxDebugHistoryContentChars = 200
+
+// debugLogHistory logs the conversation history built for an LLM request
+// when enabled: the source path, message count, and each entry's author and
+// truncated content. Off by default so normal operation doesn't spam logs.
+func debugLogHistory(enabled bool, channelID, messageID, path string, history []llm.HistoryMessage) {
+	if !enabled {
+		return
+	}
+	log.Printf("llm history debug: channel_id=%s message_id=%s path=%s count=%d", channelID, messageID, path, len(history))
+	for i, h := range history {
+		role := "user"
+		if h.IsBot {
+			role = "bot"
+		}
+		log.Printf("llm history debug: channel_id=%s message_id=%s idx=%d role=%s author=%s content=%q",
+			channelID, messageID, i, role, h.Author, truncate(h.Content, maxDebugHistoryContentChars))
+	}
+}
+
 func historyFromReplyChain(s *discordgo.Session, fetcher messageHistoryFetcher, msg *discordgo.Message) []llm.HistoryMessage {
 	chain := make([]*discordgo.Message, 0, maxReplyChainHistory)
 	ref := msg.MessageReference
