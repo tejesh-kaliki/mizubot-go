@@ -20,6 +20,15 @@ type Message struct {
 	Content   string
 	Timezone  string
 	Now       time.Time
+	History   []HistoryMessage
+}
+
+// HistoryMessage is a prior message in the conversation, provided as
+// additional context ahead of the current user message.
+type HistoryMessage struct {
+	Author  string
+	Content string
+	IsBot   bool
 }
 
 type CompletionRequest struct {
@@ -164,7 +173,7 @@ func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Messa
 		}
 		result, err := completeWithMetrics(ctx, s.completer, CompletionRequest{
 			SystemPrompt: systemPrompt,
-			UserPrompt:   buildUserPrompt(message),
+			UserPrompt:   buildUserPromptWithHistory(message),
 		})
 		if err != nil {
 			return Response{}, err
@@ -270,8 +279,9 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	}
 	messages := []ChatMessage{
 		{Role: "system", Content: systemPrompt + "\n\n" + buildToolResponseStylePrompt()},
-		{Role: "user", Content: buildUserPrompt(message)},
 	}
+	messages = append(messages, historyChatMessages(message.History)...)
+	messages = append(messages, ChatMessage{Role: "user", Content: buildUserPrompt(message)})
 	usage := Usage{}
 	var llmTurns int64
 	var toolCalls int64
@@ -348,6 +358,33 @@ func completeWithMetrics(ctx context.Context, completer Completer, request Compl
 		return Response{}, err
 	}
 	return Response{Content: strings.TrimSpace(content)}, nil
+}
+
+// historyChatMessages converts prior conversation turns into ChatMessages so
+// native chat completers see them as distinct roles ahead of the current
+// user message. Other users' turns are tagged with their display name since
+// chat roles alone can't distinguish speakers in a multi-user channel.
+func historyChatMessages(history []HistoryMessage) []ChatMessage {
+	if len(history) == 0 {
+		return nil
+	}
+	out := make([]ChatMessage, 0, len(history))
+	for _, h := range history {
+		if h.IsBot {
+			out = append(out, ChatMessage{Role: "assistant", Content: h.Content})
+			continue
+		}
+		out = append(out, ChatMessage{Role: "user", Content: historySpeakerLabel(h.Author) + ": " + h.Content})
+	}
+	return out
+}
+
+func historySpeakerLabel(author string) string {
+	author = strings.TrimSpace(author)
+	if author == "" {
+		return "Discord user"
+	}
+	return author
 }
 
 func addUsage(a, b Usage) Usage {
@@ -482,7 +519,7 @@ func (p staticGuildInstructionProvider) GetGuildInstruction(_ context.Context, g
 }
 
 func buildToolDecisionPrompt(message Message) string {
-	return buildUserPrompt(message)
+	return buildUserPromptWithHistory(message)
 }
 
 func buildToolResultPrompt(message Message, results string) string {
@@ -494,7 +531,7 @@ Tool results:
 
 %s
 
-Write the final response to the user. Be concise and mention any tool error plainly.`, buildUserPrompt(message), results, buildToolResponseStylePrompt())
+Write the final response to the user. Be concise and mention any tool error plainly.`, buildUserPromptWithHistory(message), results, buildToolResponseStylePrompt())
 }
 
 func buildToolResponseStylePrompt() string {

@@ -95,6 +95,16 @@ func TestGuildDisplayNameUsesMessageMemberNickname(t *testing.T) {
 	}
 }
 
+func TestNewRequestsMessageContentIntent(t *testing.T) {
+	b, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if b.session.Identify.Intents&discordgo.IntentMessageContent == 0 {
+		t.Fatalf("session should request the message content intent, got intents=%d", b.session.Identify.Intents)
+	}
+}
+
 func TestSplitDiscordMessages(t *testing.T) {
 	short := splitDiscordMessages(" hello ")
 	if len(short) != 1 || short[0] != "hello" {

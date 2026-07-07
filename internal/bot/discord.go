@@ -41,6 +41,7 @@ type Bot struct {
 	registrar    CommandRegistrar
 	modules      []commands.Module
 	dryRun       bool
+	debugHistory bool
 	llm          *llm.Service
 	llmLogger    llmMessageLogger
 	userSettings *usersettings.Service
@@ -51,6 +52,14 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 	if err != nil {
 		return nil, err
 	}
+	// Message Content is a privileged intent: without it, Discord returns an
+	// empty Content field for any message that doesn't mention this bot,
+	// wasn't sent by it, or isn't a DM — both over the gateway and via REST
+	// endpoints like ChannelMessages, which the conversation-history buffer
+	// depends on. Must also be enabled for this application in the Discord
+	// Developer Portal (Bot > Privileged Gateway Intents), or the gateway
+	// will reject the connection with a disallowed-intents error.
+	s.Identify.Intents |= discordgo.IntentMessageContent
 
 	reminderService := reminders.NewService(store)
 	modules := []commands.Module{
@@ -196,6 +205,10 @@ func (b *Bot) RegisterCommandsForGuild(guildID string) error {
 
 func (b *Bot) SetDryRun(d bool) { b.dryRun = d }
 
+// SetDebugHistory toggles verbose logging of the conversation history
+// (path used, message count, and each history entry) built for LLM requests.
+func (b *Bot) SetDebugHistory(d bool) { b.debugHistory = d }
+
 func (b *Bot) commandDefinitions() []*discordgo.ApplicationCommand {
 	defs := make([]*discordgo.ApplicationCommand, 0, len(b.modules))
 	for _, module := range b.modules {
@@ -222,7 +235,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	if m.Author.ID == s.State.User.ID || m.Content == "" {
 		return
 	}
-	if !messageMentionsUser(m.Content, s.State.User.ID) {
+	if !shouldTriggerLLM(s, m.Message) {
 		return
 	}
 	if b.dryRun {
@@ -237,6 +250,8 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		log.Printf("generating llm response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
 		startedAt := time.Now()
 		timezone := b.userTimezoneForMessage(ctx, m.Author.ID)
+		history := buildConversationHistory(s, s, m.Message)
+		debugLogHistory(b.debugHistory, m.ChannelID, m.ID, historySourcePath(m.Message), history)
 		generated, err := b.llm.GenerateResponseWithMetrics(ctx, llm.Message{
 			UserID:    m.Author.ID,
 			Username:  guildDisplayName(s, m.GuildID, m.Author, m.Member),
@@ -246,6 +261,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			Content:   messageTextWithDisplayNames(s, m.Message),
 			Timezone:  timezone,
 			Now:       startedAt,
+			History:   history,
 		})
 		latency := time.Since(startedAt)
 		if err != nil {

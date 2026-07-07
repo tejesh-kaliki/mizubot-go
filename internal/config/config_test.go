@@ -86,4 +86,32 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 	if cfg.GuildInstructions["G"] != "Server rule" {
 		t.Fatalf("guild instruction mismatch: %#v", cfg.GuildInstructions)
 	}
+	if cfg.LLMDebugHistory {
+		t.Fatalf("llm_debug_history should default to false")
+	}
+}
+
+func TestLLMDebugHistoryFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(p, []byte(sampleYAML+"\nllm_debug_history: true\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFromFile(p)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if !cfg.LLMDebugHistory {
+		t.Fatalf("llm_debug_history from file should be true")
+	}
+
+	t.Setenv("LLM_DEBUG_HISTORY", "1")
+	cfg, err = LoadFromFile(p)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if !cfg.LLMDebugHistory {
+		t.Fatalf("LLM_DEBUG_HISTORY=1 env override should enable debug history")
+	}
 }

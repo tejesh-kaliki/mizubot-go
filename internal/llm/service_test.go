@@ -271,6 +271,101 @@ func TestServiceUsesServerBotNameInSystemPrompt(t *testing.T) {
 	}
 }
 
+func TestServiceGenerateResponseWithoutToolsEmbedsHistoryInUserPrompt(t *testing.T) {
+	completer := &fakeCompleter{responses: []string{"answer"}}
+	service := NewService(completer)
+
+	if _, err := service.GenerateResponse(context.Background(), Message{
+		BotName: "Mizu",
+		Content: "and now?",
+		History: []HistoryMessage{
+			{Author: "Alice", Content: "what's the weather"},
+			{Author: "", Content: "it's sunny", IsBot: true},
+		},
+	}); err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(completer.requests))
+	}
+	prompt := completer.requests[0].UserPrompt
+	if !strings.Contains(prompt, "Conversation history") {
+		t.Fatalf("user prompt missing history header: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Alice: what's the weather") {
+		t.Fatalf("user prompt missing other-speaker history line: %q", prompt)
+	}
+	if !strings.Contains(prompt, "Mizu: it's sunny") {
+		t.Fatalf("user prompt missing bot history line tagged with bot name: %q", prompt)
+	}
+	historyIdx := strings.Index(prompt, "Conversation history")
+	messageIdx := strings.Index(prompt, "Message: and now?")
+	if historyIdx < 0 || messageIdx < 0 || historyIdx > messageIdx {
+		t.Fatalf("history should appear before the current message in the prompt: %q", prompt)
+	}
+}
+
+func TestServiceGenerateResponseWithoutHistoryOmitsHistorySection(t *testing.T) {
+	completer := &fakeCompleter{responses: []string{"answer"}}
+	service := NewService(completer)
+
+	if _, err := service.GenerateResponse(context.Background(), Message{Content: "hello"}); err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if strings.Contains(completer.requests[0].UserPrompt, "Conversation history") {
+		t.Fatalf("user prompt should not mention history when none was provided: %q", completer.requests[0].UserPrompt)
+	}
+}
+
+func TestServiceGenerateWithNativeToolsIncludesHistoryAsChatMessages(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{{Content: "final answer"}}}
+	service := NewService(completer, Tool{
+		Name:        "keyword_tool",
+		Description: "A keyword tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Keywords:    []string{"remind"},
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "ok"}, nil
+		},
+	})
+
+	got, err := service.GenerateResponse(context.Background(), Message{
+		Content: "remind me tomorrow",
+		History: []HistoryMessage{
+			{Author: "Alice", Content: "hey there"},
+			{Content: "hi Alice, how can I help?", IsBot: true},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "final answer" {
+		t.Fatalf("response = %q, want final answer", got)
+	}
+	if len(completer.chats) != 1 {
+		t.Fatalf("chats = %d, want 1", len(completer.chats))
+	}
+	messages := completer.chats[0].Messages
+	if len(messages) != 4 {
+		t.Fatalf("messages = %d, want 4 (system, 2 history, user): %#v", len(messages), messages)
+	}
+	if messages[0].Role != "system" {
+		t.Fatalf("messages[0].Role = %q, want system", messages[0].Role)
+	}
+	if messages[1].Role != "user" || messages[1].Content != "Alice: hey there" {
+		t.Fatalf("messages[1] = %#v, want user Alice: hey there", messages[1])
+	}
+	if messages[2].Role != "assistant" || messages[2].Content != "hi Alice, how can I help?" {
+		t.Fatalf("messages[2] = %#v, want assistant reply", messages[2])
+	}
+	if messages[3].Role != "user" || !strings.Contains(messages[3].Content, "Message: remind me tomorrow") {
+		t.Fatalf("messages[3] = %#v, want current user message last", messages[3])
+	}
+	if strings.Contains(messages[3].Content, "Conversation history") {
+		t.Fatalf("current user message should not duplicate history text: %#v", messages[3])
+	}
+}
+
 func TestServiceGenerateResponseSkipsOtherGuildInstructions(t *testing.T) {
 	completer := &fakeCompleter{responses: []string{"answer"}}
 	service := NewServiceWithGuildInstructions(completer, map[string]string{
