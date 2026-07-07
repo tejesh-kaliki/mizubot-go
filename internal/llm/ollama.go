@@ -290,6 +290,37 @@ Stay helpful, conversational, and direct.
 Do not mention that you are using an LLM.`, botName)
 }
 
+// buildUserPromptWithHistory embeds prior conversation turns as a text block
+// ahead of the current message, for completers that only take a flat
+// system/user prompt pair rather than a role-tagged message array.
+func buildUserPromptWithHistory(message Message) string {
+	history := buildHistoryBlock(message.History, message.BotName)
+	if history == "" {
+		return buildUserPrompt(message)
+	}
+	return history + "\n" + buildUserPrompt(message)
+}
+
+func buildHistoryBlock(history []HistoryMessage, botName string) string {
+	if len(history) == 0 {
+		return ""
+	}
+	botName = strings.TrimSpace(botName)
+	if botName == "" {
+		botName = "MizuBot"
+	}
+	var b strings.Builder
+	b.WriteString("Conversation history (oldest first):\n")
+	for _, h := range history {
+		speaker := historySpeakerLabel(h.Author)
+		if h.IsBot {
+			speaker = botName
+		}
+		fmt.Fprintf(&b, "%s: %s\n", speaker, h.Content)
+	}
+	return b.String()
+}
+
 func buildUserPrompt(message Message) string {
 	username := strings.TrimSpace(message.Username)
 	if username == "" {
