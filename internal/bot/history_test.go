@@ -203,6 +203,44 @@ func TestBuildConversationHistoryUsesChannelBufferWhenNotReply(t *testing.T) {
 	}
 }
 
+func TestChannelBufferIncludesPlainChatterNotJustBotRelatedMessages(t *testing.T) {
+	s := newTestSession("bot1")
+
+	current := &discordgo.Message{ID: "current", ChannelID: "chan1", GuildID: "guild1", Content: "<@bot1> and now?", Author: &discordgo.User{ID: "user1"}}
+
+	// Mirrors the reported scenario: plain human chatter with no bot
+	// mention, a message that @mentions the bot, this bot's own reply, and
+	// another bot's message — all in the same channel buffer.
+	fetcher := &stubHistoryFetcher{
+		bufferReturn: []*discordgo.Message{
+			{ID: "m4", ChannelID: "chan1", Content: "on it!", Author: &discordgo.User{ID: "bot1", Username: "mizubot", Bot: true}},
+			{ID: "m3", ChannelID: "chan1", Content: "<@bot1> can you check this?", Author: &discordgo.User{ID: "user1", Username: "account1"}},
+			{ID: "m2", ChannelID: "chan1", Content: "other bot chatter", Author: &discordgo.User{ID: "otherbot", Username: "otherbot", Bot: true}},
+			{ID: "m1", ChannelID: "chan1", Content: "Need to see if it can read message", Author: &discordgo.User{ID: "user2", Username: "account2"}},
+		},
+	}
+
+	history := buildConversationHistory(s, fetcher, current)
+
+	if len(history) != 3 {
+		t.Fatalf("history length = %d, want 3 (plain chatter + mention + bot reply, other-bot excluded): %#v", len(history), history)
+	}
+	if history[0].Content != "Need to see if it can read message" {
+		t.Fatalf("history[0] should be the plain human chatter with no bot mention, got %#v", history[0])
+	}
+	if history[1].Content != "<@bot1> can you check this?" {
+		t.Fatalf("history[1] should be the mention message, got %#v", history[1])
+	}
+	if history[2].Content != "on it!" || !history[2].IsBot {
+		t.Fatalf("history[2] should be this bot's own reply, got %#v", history[2])
+	}
+	for _, h := range history {
+		if h.Content == "other bot chatter" {
+			t.Fatalf("other bot's message should have been filtered out: %#v", history)
+		}
+	}
+}
+
 func TestHistoryMessagesFromDiscordTruncatesLongContent(t *testing.T) {
 	s := newTestSession("bot1")
 	longContent := strings.Repeat("x", maxHistoryMessageChars+200)

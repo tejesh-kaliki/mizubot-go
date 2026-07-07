@@ -52,6 +52,14 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 	if err != nil {
 		return nil, err
 	}
+	// Message Content is a privileged intent: without it, Discord returns an
+	// empty Content field for any message that doesn't mention this bot,
+	// wasn't sent by it, or isn't a DM — both over the gateway and via REST
+	// endpoints like ChannelMessages, which the conversation-history buffer
+	// depends on. Must also be enabled for this application in the Discord
+	// Developer Portal (Bot > Privileged Gateway Intents), or the gateway
+	// will reject the connection with a disallowed-intents error.
+	s.Identify.Intents |= discordgo.IntentMessageContent
 
 	reminderService := reminders.NewService(store)
 	modules := []commands.Module{
