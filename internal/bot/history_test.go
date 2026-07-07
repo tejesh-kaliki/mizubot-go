@@ -331,9 +331,12 @@ func TestChannelBufferIncludesPlainChatterNotJustBotRelatedMessages(t *testing.T
 	}
 }
 
-func TestHistoryMessagesFromDiscordTruncatesLongContent(t *testing.T) {
+func TestHistoryMessagesFromDiscordTruncatesLongContentInTheMiddle(t *testing.T) {
 	s := newTestSession("bot1")
-	longContent := strings.Repeat("x", maxHistoryMessageChars+200)
+	prefix := "START-" + strings.Repeat("a", 50)
+	suffix := strings.Repeat("b", 50) + "-END"
+	middle := strings.Repeat("z", maxHistoryMessageChars*2)
+	longContent := prefix + middle + suffix
 	messages := []*discordgo.Message{
 		{ID: "m1", Content: longContent, Author: &discordgo.User{ID: "user1", Username: "account1"}},
 	}
@@ -343,11 +346,37 @@ func TestHistoryMessagesFromDiscordTruncatesLongContent(t *testing.T) {
 	if len(history) != 1 {
 		t.Fatalf("history length = %d, want 1", len(history))
 	}
-	if got := len([]rune(history[0].Content)); got > maxHistoryMessageChars+1 {
-		t.Fatalf("history content length = %d, want <= %d", got, maxHistoryMessageChars+1)
+	got := history[0].Content
+	if !strings.HasPrefix(got, "START-") {
+		t.Fatalf("truncated content should retain the original prefix, got %q", got)
 	}
-	if !strings.HasSuffix(history[0].Content, "…") {
-		t.Fatalf("truncated content should end with an ellipsis: %q", history[0].Content)
+	if !strings.HasSuffix(got, "-END") {
+		t.Fatalf("truncated content should retain the original suffix, got %q", got)
+	}
+	if !strings.Contains(got, "truncated") {
+		t.Fatalf("truncated content should contain a truncation marker, got %q", got)
+	}
+	if len([]rune(got)) >= len([]rune(longContent)) {
+		t.Fatalf("truncated content should be meaningfully shorter than the original, got len=%d want < %d", len([]rune(got)), len([]rune(longContent)))
+	}
+}
+
+func TestTruncateMiddleKeepsPrefixAndSuffixWithMarker(t *testing.T) {
+	short := "hello"
+	if got := truncateMiddle(short, 10); got != short {
+		t.Fatalf("content within the limit should be unchanged, got %q", got)
+	}
+
+	long := strings.Repeat("a", 20) + strings.Repeat("b", 20)
+	got := truncateMiddle(long, 10)
+	if !strings.HasPrefix(got, "aaaaa") {
+		t.Fatalf("expected prefix retained, got %q", got)
+	}
+	if !strings.HasSuffix(got, "bbbbb") {
+		t.Fatalf("expected suffix retained, got %q", got)
+	}
+	if !strings.Contains(got, "truncated 30 chars") {
+		t.Fatalf("expected marker noting the number of chars cut, got %q", got)
 	}
 }
 

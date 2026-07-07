@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -147,6 +148,23 @@ func historyFromChannelBuffer(s *discordgo.Session, fetcher messageHistoryFetche
 	return historyMessagesFromDiscord(s, msg.GuildID, fetched, true)
 }
 
+// truncateMiddle caps content to roughly max runes by cutting out of the
+// middle rather than the end, keeping a prefix and suffix around an explicit
+// marker noting how much was removed. This keeps the LLM from seeing a
+// message trail off mid-sentence with no indication it was cut, which end
+// truncation would produce.
+func truncateMiddle(content string, max int) string {
+	runes := []rune(content)
+	if max <= 0 || len(runes) <= max {
+		return content
+	}
+	prefixLen := max / 2
+	suffixLen := max - prefixLen
+	cut := len(runes) - prefixLen - suffixLen
+	marker := fmt.Sprintf(" …[truncated %d chars]… ", cut)
+	return string(runes[:prefixLen]) + marker + string(runes[len(runes)-suffixLen:])
+}
+
 // reverseMessages reverses a slice of messages in place. ChannelMessages and
 // ancestor chains are both collected newest-first; the LLM prompt needs
 // them in chronological (oldest-first) order.
@@ -183,7 +201,7 @@ func historyMessagesFromDiscord(s *discordgo.Session, guildID string, messages [
 
 		out = append(out, llm.HistoryMessage{
 			Author:  guildDisplayName(s, guildID, dm.Author, dm.Member),
-			Content: truncate(content, maxHistoryMessageChars),
+			Content: truncateMiddle(content, maxHistoryMessageChars),
 			IsBot:   isBotAuthor,
 		})
 	}
