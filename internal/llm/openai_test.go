@@ -186,6 +186,39 @@ func TestOpenAIMessagesRoundTripsToolCallID(t *testing.T) {
 	}
 }
 
+func TestNewOpenAIClientAppendsV1(t *testing.T) {
+	cases := map[string]string{
+		"http://bifrost.test":           "http://bifrost.test/v1",
+		"http://bifrost.test/":          "http://bifrost.test/v1",
+		"http://bifrost.test/v1":        "http://bifrost.test/v1",
+		"http://bifrost.test/v1/":       "http://bifrost.test/v1",
+		"http://bifrost.test/openai/v1": "http://bifrost.test/openai/v1",
+	}
+	for in, want := range cases {
+		var gotURL string
+		transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			gotURL = "http://" + r.URL.Host + r.URL.Path
+			gotURL = gotURL[:len(gotURL)-len("/chat/completions")]
+			var body bytes.Buffer
+			_ = json.NewEncoder(&body).Encode(map[string]any{
+				"id": "x", "object": "chat.completion", "created": 1, "model": "m",
+				"choices": []map[string]any{{"index": 0, "finish_reason": "stop", "message": map[string]any{"role": "assistant", "content": "ok"}}},
+				"usage":   map[string]any{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+			})
+			header := make(http.Header)
+			header.Set("Content-Type", "application/json")
+			return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(&body), Header: header}, nil
+		})
+		client := NewOpenAIClient(OpenAIConfig{BaseURL: in, Model: "m", HTTPClient: &http.Client{Transport: transport}})
+		if _, err := client.Complete(context.Background(), CompletionRequest{UserPrompt: "hi"}); err != nil {
+			t.Fatalf("Complete(%q): %v", in, err)
+		}
+		if gotURL != want {
+			t.Fatalf("BaseURL(%q) -> %q, want %q", in, gotURL, want)
+		}
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {

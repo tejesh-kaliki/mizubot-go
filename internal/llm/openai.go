@@ -43,6 +43,9 @@ func NewOpenAIClient(cfg OpenAIConfig) *OpenAIClient {
 	if baseURL == "" {
 		baseURL = DefaultLLMBaseURL
 	}
+	if !strings.HasSuffix(baseURL, "/v1") {
+		baseURL += "/v1"
+	}
 	model := strings.TrimSpace(cfg.Model)
 	if model == "" {
 		model = DefaultLLMModel

@@ -13,7 +13,7 @@ aws:
   s3_secret_key: "secret"
   s3_region: "ap-south-1"
 llm:
-  base_url: "http://localhost:8080/v1" # OpenAI-compatible endpoint, e.g. a Bifrost gateway
+  base_url: "http://localhost:8080" # OpenAI-compatible endpoint, e.g. a Bifrost gateway; "/v1" is appended automatically if missing
   model: "llama3.2"
   api_key: ""     # optional, forwarded as a Bearer token
   timeout: "60s"

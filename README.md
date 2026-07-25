@@ -39,9 +39,10 @@ When the bot is mentioned in Discord, it sends the current message to the config
 The LLM client speaks the OpenAI chat completions protocol (via the official
 [`openai-go`](https://github.com/openai/openai-go) SDK), so `LLM_BASE_URL` should
 point at any OpenAI-compatible endpoint — typically a local
-[Bifrost](https://getbifrost.ai) gateway, which defaults to
-`http://localhost:8080/v1` and can itself route to Ollama, OpenAI, or other
-providers. `LLM_API_KEY` is optional and only needed if your gateway requires one.
+[Bifrost](https://getbifrost.ai) gateway, which defaults to port `8080` and can
+itself route to Ollama, OpenAI, or other providers. `/v1` is appended
+automatically if you don't include it. `LLM_API_KEY` is optional and only
+needed if your gateway requires one.
 
 For Docker Compose, a local gateway should be reached through the host gateway. The production compose file sets:
 
