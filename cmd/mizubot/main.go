@@ -83,10 +83,11 @@ func main() {
 	llmStatsStore := llmstats.NewStore(database)
 
 	allTools := append(llmtools.NewReminderTools(reminderService, userSettingsService), llmtools.NewUserSettingsTools(userSettingsService)...)
-	llmService := llm.NewServiceWithGuildInstructionProvider(llm.NewOllamaClient(llm.OllamaConfig{
-		BaseURL: cfg.OllamaBaseURL,
-		Model:   cfg.OllamaModel,
-		Timeout: cfg.OllamaTimeout,
+	llmService := llm.NewServiceWithGuildInstructionProvider(llm.NewOpenAIClient(llm.OpenAIConfig{
+		BaseURL: cfg.LLMBaseURL,
+		Model:   cfg.LLMModel,
+		APIKey:  cfg.LLMAPIKey,
+		Timeout: cfg.LLMTimeout,
 	}), guildInstructionStore, allTools...)
 
 	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore)

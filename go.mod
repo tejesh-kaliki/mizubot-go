@@ -10,7 +10,9 @@ require (
 	github.com/bwmarrin/discordgo v0.27.1
 	github.com/gorilla/feeds v1.2.0
 	github.com/mmcdole/gofeed v1.3.0
+	github.com/openai/openai-go v1.12.0
 	github.com/pressly/goose/v3 v3.24.3
+	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/net v0.56.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.37.0
@@ -44,8 +46,11 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
+	github.com/tidwall/gjson v1.14.4 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.1 // indirect
+	github.com/tidwall/sjson v1.2.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect

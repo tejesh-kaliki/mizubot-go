@@ -25,9 +25,10 @@ type Config struct {
 	Env                    string // "prod" or "test"
 	TestGuildID            string
 	DryRun                 bool
-	OllamaBaseURL          string
-	OllamaModel            string
-	OllamaTimeout          time.Duration
+	LLMBaseURL             string
+	LLMModel               string
+	LLMAPIKey              string
+	LLMTimeout             time.Duration
 	GuildInstructions      map[string]string
 	LLMDebugHistory        bool
 }
@@ -41,7 +42,7 @@ type fileConfig struct {
 	Env               string            `yaml:"env"`
 	TestGuildID       string            `yaml:"test_guild_id"`
 	DryRun            bool              `yaml:"dry_run"`
-	Ollama            ollamaFileConfig  `yaml:"ollama"`
+	LLM               llmFileConfig     `yaml:"llm"`
 	GuildInstructions map[string]string `yaml:"guild_instructions"`
 	LLMDebugHistory   bool              `yaml:"llm_debug_history"`
 }
@@ -60,9 +61,10 @@ type awsFileConfig struct {
 	S3Region    string `yaml:"s3_region"`
 }
 
-type ollamaFileConfig struct {
+type llmFileConfig struct {
 	BaseURL string `yaml:"base_url"`
 	Model   string `yaml:"model"`
+	APIKey  string `yaml:"api_key"`
 	Timeout string `yaml:"timeout"`
 }
 
@@ -107,9 +109,10 @@ type envVals struct {
 	S3Prefix               string
 	DryRun                 string
 	TestGuildID            string
-	OllamaBaseURL          string
-	OllamaModel            string
-	OllamaTimeout          string
+	LLMBaseURL             string
+	LLMModel               string
+	LLMAPIKey              string
+	LLMTimeout             string
 	LLMDebugHistory        string
 }
 
@@ -130,9 +133,10 @@ func osEnv() envVals {
 		S3Prefix:               os.Getenv("S3_PREFIX"),
 		DryRun:                 os.Getenv("DRY_RUN"),
 		TestGuildID:            os.Getenv("TEST_GUILD_ID"),
-		OllamaBaseURL:          os.Getenv("OLLAMA_BASE_URL"),
-		OllamaModel:            os.Getenv("OLLAMA_MODEL"),
-		OllamaTimeout:          os.Getenv("OLLAMA_TIMEOUT"),
+		LLMBaseURL:             os.Getenv("LLM_BASE_URL"),
+		LLMModel:               os.Getenv("LLM_MODEL"),
+		LLMAPIKey:              os.Getenv("LLM_API_KEY"),
+		LLMTimeout:             os.Getenv("LLM_TIMEOUT"),
 		LLMDebugHistory:        os.Getenv("LLM_DEBUG_HISTORY"),
 	}
 }
@@ -175,10 +179,10 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		llmDebugHistory = true
 	}
 
-	ollamaTimeoutStr := fallback(e.OllamaTimeout, f.Ollama.Timeout, "60s")
-	ollamaTimeout := time.Minute
-	if d, err := time.ParseDuration(ollamaTimeoutStr); err == nil {
-		ollamaTimeout = d
+	llmTimeoutStr := fallback(e.LLMTimeout, f.LLM.Timeout, "60s")
+	llmTimeout := time.Minute
+	if d, err := time.ParseDuration(llmTimeoutStr); err == nil {
+		llmTimeout = d
 	}
 
 	testGuild := fallback(e.TestGuildID, f.TestGuildID, "")
@@ -198,9 +202,10 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		Env:                    env,
 		DryRun:                 dry,
 		TestGuildID:            testGuild,
-		OllamaBaseURL:          fallback(e.OllamaBaseURL, f.Ollama.BaseURL, "http://localhost:11434"),
-		OllamaModel:            fallback(e.OllamaModel, f.Ollama.Model, "llama3.2"),
-		OllamaTimeout:          ollamaTimeout,
+		LLMBaseURL:             fallback(e.LLMBaseURL, f.LLM.BaseURL, "http://localhost:8080/v1"),
+		LLMModel:               fallback(e.LLMModel, f.LLM.Model, "llama3.2"),
+		LLMAPIKey:              fallback(e.LLMAPIKey, f.LLM.APIKey, ""),
+		LLMTimeout:             llmTimeout,
 		GuildInstructions:      f.GuildInstructions,
 		LLMDebugHistory:        llmDebugHistory,
 	}, nil

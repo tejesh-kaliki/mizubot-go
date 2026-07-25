@@ -22,9 +22,10 @@ YAML example: see `config.example.yaml`.
   export DISCORD_TOKEN='Bot <token>'
   export DATABASE_PATH=./reminders.db
   export TICK_INTERVAL=10s
-  export OLLAMA_BASE_URL=http://localhost:11434
-  export OLLAMA_MODEL=llama3.2
-  export OLLAMA_TIMEOUT=60s
+  export LLM_BASE_URL=http://localhost:8080/v1
+  export LLM_MODEL=llama3.2
+  export LLM_API_KEY=""
+  export LLM_TIMEOUT=60s
   export BOT_ENV=test
   export TEST_GUILD_ID='<guild_id>'
   export DRY_RUN=1
@@ -33,12 +34,19 @@ YAML example: see `config.example.yaml`.
 
 When `BOT_ENV=test` and `TEST_GUILD_ID` are set, the `/remind` slash command is registered only in that guild for fast propagation.
 
-When the bot is mentioned in Discord, it sends the current message to the configured Ollama model and replies to that message.
+When the bot is mentioned in Discord, it sends the current message to the configured LLM and replies to that message.
 
-For Docker Compose, local Ollama should be reached through the host gateway. The production compose file sets:
+The LLM client speaks the OpenAI chat completions protocol (via the official
+[`openai-go`](https://github.com/openai/openai-go) SDK), so `LLM_BASE_URL` should
+point at any OpenAI-compatible endpoint — typically a local
+[Bifrost](https://getbifrost.ai) gateway, which defaults to
+`http://localhost:8080/v1` and can itself route to Ollama, OpenAI, or other
+providers. `LLM_API_KEY` is optional and only needed if your gateway requires one.
+
+For Docker Compose, a local gateway should be reached through the host gateway. The production compose file sets:
 
 ```yaml
-OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+LLM_BASE_URL: "http://host.docker.internal:8080/v1"
 ```
 
 ### Slash Commands

@@ -20,9 +20,10 @@ aws:
   s3_access_key: "key"
   s3_secret_key: "secret"
   s3_region: "us-east-1"
-ollama:
-  base_url: "http://ollama.local:11434"
+llm:
+  base_url: "http://bifrost.local:8080/v1"
   model: "mistral"
+  api_key: "test-key"
   timeout: "5s"
 env: "test"
 test_guild_id: "G"
@@ -41,7 +42,7 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 
 	t.Setenv("DISCORD_TOKEN_TEST", "Bot B")
 	t.Setenv("DRY_RUN", "1")
-	t.Setenv("OLLAMA_MODEL", "llama3.2")
+	t.Setenv("LLM_MODEL", "llama3.2")
 
 	cfg, err := LoadFromFile(p)
 	if err != nil {
@@ -74,14 +75,17 @@ func TestLoadFromFileAndEnvOverride(t *testing.T) {
 	if !cfg.DryRun {
 		t.Fatalf("dry_run override failed")
 	}
-	if cfg.OllamaBaseURL != "http://ollama.local:11434" {
-		t.Fatalf("ollama base url: %s", cfg.OllamaBaseURL)
+	if cfg.LLMBaseURL != "http://bifrost.local:8080/v1" {
+		t.Fatalf("llm base url: %s", cfg.LLMBaseURL)
 	}
-	if cfg.OllamaModel != "llama3.2" {
-		t.Fatalf("ollama model override failed: %s", cfg.OllamaModel)
+	if cfg.LLMModel != "llama3.2" {
+		t.Fatalf("llm model override failed: %s", cfg.LLMModel)
 	}
-	if cfg.OllamaTimeout.String() != "5s" {
-		t.Fatalf("ollama timeout: %s", cfg.OllamaTimeout)
+	if cfg.LLMAPIKey != "test-key" {
+		t.Fatalf("llm api key: %s", cfg.LLMAPIKey)
+	}
+	if cfg.LLMTimeout.String() != "5s" {
+		t.Fatalf("llm timeout: %s", cfg.LLMTimeout)
 	}
 	if cfg.GuildInstructions["G"] != "Server rule" {
 		t.Fatalf("guild instruction mismatch: %#v", cfg.GuildInstructions)

@@ -68,10 +68,11 @@ type ChatRequest struct {
 }
 
 type ChatMessage struct {
-	Role      string
-	Content   string
-	ToolName  string
-	ToolCalls []ChatToolCall
+	Role       string
+	Content    string
+	ToolName   string
+	ToolCallID string
+	ToolCalls  []ChatToolCall
 }
 
 type ChatTool struct {
@@ -81,6 +82,7 @@ type ChatTool struct {
 }
 
 type ChatToolCall struct {
+	ID        string
 	Name      string
 	Arguments json.RawMessage
 }
@@ -312,9 +314,10 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 		for _, call := range response.ToolCalls {
 			result := executeToolCall(ctx, tools, toolCtx, call)
 			messages = append(messages, ChatMessage{
-				Role:     "tool",
-				ToolName: call.Name,
-				Content:  result,
+				Role:       "tool",
+				ToolName:   call.Name,
+				ToolCallID: call.ID,
+				Content:    result,
 			})
 		}
 	}

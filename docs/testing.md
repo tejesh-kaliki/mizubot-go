@@ -11,7 +11,7 @@
 
 ### LLM evals
 
-The LLM evals are deterministic unit tests with fake model responses. They validate tool orchestration, reminder tool argument shape, tool-loop behavior, and final reminder response formatting without calling Ollama.
+The LLM evals are deterministic unit tests with fake model responses. They validate tool orchestration, reminder tool argument shape, tool-loop behavior, and final reminder response formatting without calling the LLM endpoint.
 
 Run only LLM evals:
 
