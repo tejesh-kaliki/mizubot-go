@@ -45,6 +45,10 @@ See `db/migrations/0001_init.sql`.
   - For `hourly`: `at` may be `:MM` to run at a specific minute each hour
 - `/remind list` — Lists reminders for the invoking user
 - `/remind delete id:<number>` — Deletes a reminder by id (owned by the invoking user)
+- `/edit-prompt view|edit|reset` — Reads and writes the calling guild's row in `guild_instructions`, which `internal/llm` appends to the system prompt
+  - `edit` answers the interaction with a Discord modal (`InteractionResponseModal`) holding a paragraph text input prefilled with the current prompt; submitting it arrives as a separate `InteractionModalSubmit` interaction, which `Bot.onInteractionCreate` forwards to the same module
+  - Discord caps modal text inputs at 4000 characters, so a longer prompt seeded via `guild_instructions` in YAML cannot be edited from Discord; the command says so instead of truncating it
+  - Authorization is checked on both the command and the modal submit: the interaction's `Member.Permissions` (already resolved by Discord for the invoking channel) must include one moderation permission, or the user ID must match `owner_discord_id`
 
 ### Error handling and guarantees
 

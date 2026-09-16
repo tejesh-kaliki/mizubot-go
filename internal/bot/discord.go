@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +48,7 @@ type Bot struct {
 	userSettings *usersettings.Service
 }
 
-func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service, llmLogger llmMessageLogger) (*Bot, error) {
+func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service, llmLogger llmMessageLogger, guildInstructions commands.GuildInstructionEditor, ownerDiscordID string) (*Bot, error) {
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
@@ -73,6 +74,9 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 	}
 	if userSettingsService != nil {
 		modules = append(modules, commands.NewSettingsModule(userSettingsService))
+	}
+	if guildInstructions != nil {
+		modules = append(modules, commands.NewPromptModule(guildInstructions, ownerDiscordID))
 	}
 	b := &Bot{
 		session:      s,
@@ -218,14 +222,27 @@ func (b *Bot) commandDefinitions() []*discordgo.ApplicationCommand {
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.Type != discordgo.InteractionApplicationCommand {
+	if i.Type != discordgo.InteractionApplicationCommand && i.Type != discordgo.InteractionModalSubmit {
 		return
 	}
 	for _, module := range b.modules {
-		if module.Handle(b, s, i) {
+		if b.handleInteraction(module, s, i) {
 			return
 		}
 	}
+}
+
+// handleInteraction isolates a module panic to the interaction that caused it.
+// discordgo dispatches each event on its own goroutine, so an unrecovered panic
+// here would otherwise take the whole bot down.
+func (b *Bot) handleInteraction(module commands.Module, s *discordgo.Session, i *discordgo.InteractionCreate) (handled bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("interaction handler panic: %v\n%s", r, debug.Stack())
+			handled = false
+		}
+	}()
+	return module.Handle(b, s, i)
 }
 
 func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
@@ -386,6 +403,20 @@ func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.Mess
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
 			Flags:  flags,
+		},
+	})
+}
+
+// RespondModal opens a modal dialog in response to an interaction. Unlike the
+// other responders this surfaces the error, since a failed modal leaves the
+// interaction unanswered and the caller needs to fall back to a message.
+func (b *Bot) RespondModal(i *discordgo.InteractionCreate, customID, title string, components []discordgo.MessageComponent) error {
+	return b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID:   customID,
+			Title:      title,
+			Components: components,
 		},
 	})
 }

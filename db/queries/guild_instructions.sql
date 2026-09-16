@@ -10,3 +10,7 @@ ON CONFLICT(guild_id) DO UPDATE SET
     instructions = excluded.instructions,
     updated_at = excluded.updated_at
 RETURNING guild_id, instructions, created_at, updated_at;
+
+-- name: DeleteGuildInstructions :execrows
+DELETE FROM guild_instructions
+WHERE guild_id = ?;

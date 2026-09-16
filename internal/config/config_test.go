@@ -119,3 +119,44 @@ func TestLLMDebugHistoryFromFileAndEnv(t *testing.T) {
 		t.Fatalf("LLM_DEBUG_HISTORY=1 env override should enable debug history")
 	}
 }
+
+func TestOwnerDiscordIDFromFileAndEnv(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(p, []byte(sampleYAML+"\nowner_discord_id: \"  111  \"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFromFile(p)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if cfg.OwnerDiscordID != "111" {
+		t.Fatalf("owner id = %q, want the trimmed 111", cfg.OwnerDiscordID)
+	}
+
+	t.Setenv("OWNER_DISCORD_ID", "222")
+	cfg, err = LoadFromFile(p)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if cfg.OwnerDiscordID != "222" {
+		t.Fatalf("owner id = %q, want the env override 222", cfg.OwnerDiscordID)
+	}
+}
+
+func TestOwnerDiscordIDDefaultsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(p, []byte(sampleYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFromFile(p)
+	if err != nil {
+		t.Fatalf("LoadFromFile: %v", err)
+	}
+	if cfg.OwnerDiscordID != "" {
+		t.Fatalf("owner id = %q, want empty by default", cfg.OwnerDiscordID)
+	}
+}

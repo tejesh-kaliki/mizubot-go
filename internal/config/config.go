@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -31,6 +32,7 @@ type Config struct {
 	LLMTimeout             time.Duration
 	GuildInstructions      map[string]string
 	LLMDebugHistory        bool
+	OwnerDiscordID         string
 }
 
 type fileConfig struct {
@@ -45,6 +47,7 @@ type fileConfig struct {
 	LLM               llmFileConfig     `yaml:"llm"`
 	GuildInstructions map[string]string `yaml:"guild_instructions"`
 	LLMDebugHistory   bool              `yaml:"llm_debug_history"`
+	OwnerDiscordID    string            `yaml:"owner_discord_id"`
 }
 
 type animeFileConfig struct {
@@ -114,6 +117,7 @@ type envVals struct {
 	LLMAPIKey              string
 	LLMTimeout             string
 	LLMDebugHistory        string
+	OwnerDiscordID         string
 }
 
 func osEnv() envVals {
@@ -138,6 +142,7 @@ func osEnv() envVals {
 		LLMAPIKey:              os.Getenv("LLM_API_KEY"),
 		LLMTimeout:             os.Getenv("LLM_TIMEOUT"),
 		LLMDebugHistory:        os.Getenv("LLM_DEBUG_HISTORY"),
+		OwnerDiscordID:         os.Getenv("OWNER_DISCORD_ID"),
 	}
 }
 
@@ -208,6 +213,7 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		LLMTimeout:             llmTimeout,
 		GuildInstructions:      f.GuildInstructions,
 		LLMDebugHistory:        llmDebugHistory,
+		OwnerDiscordID:         strings.TrimSpace(fallback(e.OwnerDiscordID, f.OwnerDiscordID, "")),
 	}, nil
 }
 

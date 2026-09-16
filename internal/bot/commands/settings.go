@@ -51,6 +51,11 @@ func (m *SettingsModule) Definitions() []*discordgo.ApplicationCommand {
 }
 
 func (m *SettingsModule) Handle(responder Responder, _ *discordgo.Session, i *discordgo.InteractionCreate) bool {
+	// ApplicationCommandData panics on any other interaction type, and the
+	// dispatcher also routes modal submits.
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return false
+	}
 	if i.ApplicationCommandData().Name != "settings" {
 		return false
 	}

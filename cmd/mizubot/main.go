@@ -90,7 +90,7 @@ func main() {
 		Timeout: cfg.LLMTimeout,
 	}), guildInstructionStore, allTools...)
 
-	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore)
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore, guildInstructionStore, cfg.OwnerDiscordID)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}

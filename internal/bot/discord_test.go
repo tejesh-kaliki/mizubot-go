@@ -1,9 +1,13 @@
 package bot
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
+
+	"mizubot-go/internal/bot/commands"
+	"mizubot-go/internal/guildinstructions"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -96,13 +100,127 @@ func TestGuildDisplayNameUsesMessageMemberNickname(t *testing.T) {
 }
 
 func TestNewRequestsMessageContentIntent(t *testing.T) {
-	b, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil)
+	b, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	if b.session.Identify.Intents&discordgo.IntentMessageContent == 0 {
 		t.Fatalf("session should request the message content intent, got intents=%d", b.session.Identify.Intents)
 	}
+}
+
+type stubGuildInstructions struct{}
+
+func (stubGuildInstructions) Get(context.Context, string) (guildinstructions.Instruction, bool, error) {
+	return guildinstructions.Instruction{}, false, nil
+}
+
+func (stubGuildInstructions) Upsert(context.Context, string, string) (guildinstructions.Instruction, error) {
+	return guildinstructions.Instruction{}, nil
+}
+
+func (stubGuildInstructions) Delete(context.Context, string) (bool, error) { return false, nil }
+
+func TestEditPromptRegisteredOnlyWithAStore(t *testing.T) {
+	without, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if hasCommand(without.commandDefinitions(), "edit-prompt") {
+		t.Fatalf("edit-prompt registered without a guild instruction store")
+	}
+
+	with, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, stubGuildInstructions{}, "owner")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if !hasCommand(with.commandDefinitions(), "edit-prompt") {
+		t.Fatalf("edit-prompt missing from command definitions")
+	}
+}
+
+func hasCommand(defs []*discordgo.ApplicationCommand, name string) bool {
+	for _, def := range defs {
+		if def.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// Modal submits are a separate interaction type from slash commands; the
+// dispatcher has to forward both or /edit-prompt edit silently does nothing.
+func TestOnInteractionCreateForwardsModalSubmits(t *testing.T) {
+	module := &recordingModule{}
+	b := &Bot{modules: []commands.Module{module}}
+
+	for _, tt := range []struct {
+		interactionType discordgo.InteractionType
+		wantForwarded   bool
+	}{
+		{discordgo.InteractionApplicationCommand, true},
+		{discordgo.InteractionModalSubmit, true},
+		{discordgo.InteractionMessageComponent, false},
+		{discordgo.InteractionPing, false},
+	} {
+		module.seen = nil
+		b.onInteractionCreate(nil, &discordgo.InteractionCreate{
+			Interaction: &discordgo.Interaction{Type: tt.interactionType},
+		})
+		if forwarded := len(module.seen) == 1; forwarded != tt.wantForwarded {
+			t.Fatalf("interaction type %v forwarded = %v, want %v", tt.interactionType, forwarded, tt.wantForwarded)
+		}
+	}
+}
+
+// A modal submit reaches every module, so a module that only understands
+// application commands must not call ApplicationCommandData on one: that panics
+// inside discordgo and used to kill the process.
+func TestCommandModulesIgnoreModalSubmits(t *testing.T) {
+	modal := &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{
+			Type: discordgo.InteractionModalSubmit,
+			Data: discordgo.ModalSubmitInteractionData{CustomID: "some-other-modal"},
+		},
+	}
+
+	for name, module := range map[string]commands.Module{
+		"remind":   commands.NewRemindModule(nil, nil),
+		"anime":    commands.NewAnimeModule(nil),
+		"monitor":  commands.NewMonitorModule(nil),
+		"settings": commands.NewSettingsModule(nil),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if module.Handle(nil, nil, modal) {
+				t.Fatal("module claimed a modal submit it cannot handle")
+			}
+		})
+	}
+}
+
+// A panicking module must not take the bot down with it.
+func TestHandleInteractionRecoversFromModulePanic(t *testing.T) {
+	b := &Bot{modules: []commands.Module{panickingModule{}, &recordingModule{}}}
+	b.onInteractionCreate(nil, &discordgo.InteractionCreate{
+		Interaction: &discordgo.Interaction{Type: discordgo.InteractionApplicationCommand},
+	})
+}
+
+type panickingModule struct{}
+
+func (panickingModule) Definitions() []*discordgo.ApplicationCommand { return nil }
+
+func (panickingModule) Handle(_ commands.Responder, _ *discordgo.Session, _ *discordgo.InteractionCreate) bool {
+	panic("boom")
+}
+
+type recordingModule struct{ seen []discordgo.InteractionType }
+
+func (m *recordingModule) Definitions() []*discordgo.ApplicationCommand { return nil }
+
+func (m *recordingModule) Handle(_ commands.Responder, _ *discordgo.Session, i *discordgo.InteractionCreate) bool {
+	m.seen = append(m.seen, i.Type)
+	return true
 }
 
 func TestSplitDiscordMessages(t *testing.T) {

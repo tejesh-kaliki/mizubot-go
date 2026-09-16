@@ -74,6 +74,11 @@ func (m *RemindModule) Definitions() []*discordgo.ApplicationCommand {
 }
 
 func (m *RemindModule) Handle(responder Responder, _ *discordgo.Session, i *discordgo.InteractionCreate) bool {
+	// ApplicationCommandData panics on any other interaction type, and the
+	// dispatcher also routes modal submits.
+	if i.Type != discordgo.InteractionApplicationCommand {
+		return false
+	}
 	if i.ApplicationCommandData().Name != "remind" {
 		return false
 	}

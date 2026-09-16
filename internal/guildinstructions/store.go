@@ -65,6 +65,21 @@ func (s *Store) Upsert(ctx context.Context, guildID, instructions string) (Instr
 	return convertInstruction(row), nil
 }
 
+// Delete removes a guild's custom instructions, returning false when the
+// guild had none configured.
+func (s *Store) Delete(ctx context.Context, guildID string) (bool, error) {
+	guildID = strings.TrimSpace(guildID)
+	if guildID == "" {
+		return false, errors.New("missing guild id")
+	}
+
+	rows, err := s.q.DeleteGuildInstructions(ctx, s.db, guildID)
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (s *Store) GetGuildInstruction(ctx context.Context, guildID string) (string, bool, error) {
 	instruction, ok, err := s.Get(ctx, guildID)
 	if err != nil || !ok {

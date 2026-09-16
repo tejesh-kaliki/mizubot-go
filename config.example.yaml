@@ -26,7 +26,12 @@ dry_run: true          # log sends instead of posting
 # message count, and each history message (author + truncated content) sent
 # to the LLM for every request. Off by default to avoid log spam.
 llm_debug_history: false
+# Optional: a single Discord user ID that may always run /edit-prompt, regardless
+# of their server permissions. Override with OWNER_DISCORD_ID.
+owner_discord_id: "123456789012345678"
 # Optional: seeded into the guild_instructions DB table at startup.
+# /edit-prompt writes to the same table, so anything set here is a starting
+# value that server admins and mods can then change from Discord.
 guild_instructions:
   "123456789012345678": |
     Extra rules for this server only.

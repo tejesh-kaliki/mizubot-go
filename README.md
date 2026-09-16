@@ -55,6 +55,13 @@ LLM_BASE_URL: "http://host.docker.internal:8080/v1"
 - `/remind add message:<text> schedule:(once|hourly|daily) at:<10m|2h|3d|RFC3339|HH:MM|:MM>`
 - `/remind list`
 - `/remind delete id:<number>`
+- `/edit-prompt view` — Show this server's custom system prompt
+- `/edit-prompt edit` — Open a text editor modal to change it
+- `/edit-prompt reset` — Remove it and fall back to the default personality
+
+`/edit-prompt` is limited to members with Administrator, Manage Server, Manage
+Messages, Moderate Members, Kick Members, or Ban Members, plus the user ID in
+`owner_discord_id` (env `OWNER_DISCORD_ID`). All its replies are ephemeral.
 
 For one-time reminders, `at` accepts relative durations like `10m`, `2h`, or `3d`. Daily reminders use `HH:MM` UTC, and hourly reminders can use `:MM` for a specific minute each hour.
 

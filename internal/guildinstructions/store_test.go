@@ -100,3 +100,51 @@ func TestSeedInstructions(t *testing.T) {
 		t.Fatalf("blank seed should be ignored")
 	}
 }
+
+func TestStoreDelete(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+
+	store := NewStore(db)
+	ctx := context.Background()
+
+	removed, err := store.Delete(ctx, "guild-1")
+	if err != nil {
+		t.Fatalf("Delete on empty table: %v", err)
+	}
+	if removed {
+		t.Fatalf("removed = true for a guild with no instructions")
+	}
+
+	if _, err := store.Upsert(ctx, "guild-1", "be nice"); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	if _, err := store.Upsert(ctx, "guild-2", "be terse"); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	removed, err = store.Delete(ctx, "guild-1")
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	if !removed {
+		t.Fatalf("removed = false, want true")
+	}
+	if _, ok, err := store.Get(ctx, "guild-1"); err != nil || ok {
+		t.Fatalf("Get after delete: ok=%v err=%v, want ok=false", ok, err)
+	}
+
+	// Deleting one guild must not touch another.
+	if _, ok, err := store.Get(ctx, "guild-2"); err != nil || !ok {
+		t.Fatalf("guild-2 instructions lost: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestStoreDeleteRequiresGuildID(t *testing.T) {
+	db := testDB(t)
+	defer db.Close()
+
+	if _, err := NewStore(db).Delete(context.Background(), "  "); err == nil {
+		t.Fatalf("Delete with a blank guild id should error")
+	}
+}

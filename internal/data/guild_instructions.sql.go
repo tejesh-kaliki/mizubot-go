@@ -9,6 +9,19 @@ import (
 	"context"
 )
 
+const deleteGuildInstructions = `-- name: DeleteGuildInstructions :execrows
+DELETE FROM guild_instructions
+WHERE guild_id = ?
+`
+
+func (q *Queries) DeleteGuildInstructions(ctx context.Context, db DBTX, guildID string) (int64, error) {
+	result, err := db.ExecContext(ctx, deleteGuildInstructions, guildID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const getGuildInstructions = `-- name: GetGuildInstructions :one
 SELECT guild_id, instructions, created_at, updated_at
 FROM guild_instructions
