@@ -111,17 +111,33 @@ type Tool struct {
 	Description string
 	Parameters  json.RawMessage
 	Keywords    []string
-	Execute     ToolHandler
+	// ClassifierHint, when set, is used instead of Description to decide
+	// whether this tool is relevant to a message (e.g. via ToolClassifier).
+	// Description stays optimized for the LLM's own tool-calling schema;
+	// ClassifierHint can spell out phrasing, abbreviations, or examples a
+	// classifier needs but that would just be noise in the tool schema.
+	ClassifierHint string
+	Execute        ToolHandler
 }
 
 type GuildInstructionProvider interface {
 	GetGuildInstruction(ctx context.Context, guildID string) (string, bool, error)
 }
 
+// ToolClassifier decides which tools are relevant to a message, as a
+// smarter alternative to keyword matching. If it returns an error,
+// toolsForMessage falls back to keyword matching for that message. The
+// returned map holds one entry per relevant tool, keyed by tool name, with
+// the classifier's confidence (0-1) that the tool applies.
+type ToolClassifier interface {
+	RelevantTools(ctx context.Context, message Message, tools map[string]Tool) (map[string]float64, error)
+}
+
 type Service struct {
 	completer                Completer
 	tools                    map[string]Tool
 	guildInstructionProvider GuildInstructionProvider
+	toolClassifier           ToolClassifier
 }
 
 type Response struct {
@@ -154,6 +170,16 @@ func NewServiceWithGuildInstructionProvider(completer Completer, guildInstructio
 	}
 }
 
+// SetToolClassifier installs a ToolClassifier used to pick relevant tools
+// for a message. When nil (the default), or when it errors on a given
+// message, tools are selected by keyword match instead.
+func (s *Service) SetToolClassifier(classifier ToolClassifier) {
+	if s == nil {
+		return
+	}
+	s.toolClassifier = classifier
+}
+
 func (s *Service) GenerateResponse(ctx context.Context, message Message) (string, error) {
 	response, err := s.GenerateResponseWithMetrics(ctx, message)
 	return response.Content, err
@@ -167,7 +193,7 @@ func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Messa
 	if message.Content == "" {
 		return Response{}, nil
 	}
-	tools := s.toolsForMessage(message)
+	tools, hints := s.toolsForMessage(ctx, message)
 	if len(tools) == 0 {
 		systemPrompt, err := s.buildSystemPrompt(ctx, message)
 		if err != nil {
@@ -183,7 +209,7 @@ func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Messa
 		result.LLMTurns = 1
 		return result, nil
 	}
-	return s.generateWithTools(ctx, message, tools)
+	return s.generateWithTools(ctx, message, tools, hints)
 }
 
 type toolDecision struct {
@@ -202,9 +228,9 @@ type toolExecutionResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
-func (s *Service) generateWithTools(ctx context.Context, message Message, tools map[string]Tool) (Response, error) {
+func (s *Service) generateWithTools(ctx context.Context, message Message, tools map[string]Tool, hints map[string]float64) (Response, error) {
 	if chatCompleter, ok := s.completer.(ChatCompleter); ok {
-		return s.generateWithNativeTools(ctx, chatCompleter, message, tools)
+		return s.generateWithNativeTools(ctx, chatCompleter, message, tools, hints)
 	}
 
 	systemPrompt, err := s.buildToolSystemPrompt(ctx, message, tools)
@@ -273,14 +299,18 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	return finalResponse, nil
 }
 
-func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message, tools map[string]Tool) (Response, error) {
+func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message, tools map[string]Tool, hints map[string]float64) (Response, error) {
 	selectedChatTools := chatTools(tools)
 	systemPrompt, err := s.buildSystemPrompt(ctx, message)
 	if err != nil {
 		return Response{}, err
 	}
+	systemContent := systemPrompt + "\n\n" + buildToolResponseStylePrompt()
+	if hintPrompt := buildToolHintPrompt(hints, tools); hintPrompt != "" {
+		systemContent += "\n\n" + hintPrompt
+	}
 	messages := []ChatMessage{
-		{Role: "system", Content: systemPrompt + "\n\n" + buildToolResponseStylePrompt()},
+		{Role: "system", Content: systemContent},
 	}
 	messages = append(messages, historyChatMessages(message.History)...)
 	messages = append(messages, ChatMessage{Role: "user", Content: buildUserPrompt(message)})
@@ -397,10 +427,50 @@ func addUsage(a, b Usage) Usage {
 	}
 }
 
-func (s *Service) toolsForMessage(message Message) map[string]Tool {
+func (s *Service) toolsForMessage(ctx context.Context, message Message) (map[string]Tool, map[string]float64) {
 	if len(s.tools) == 0 {
-		return nil
+		return nil, nil
 	}
+	if s.toolClassifier != nil {
+		if scores, err := s.toolClassifier.RelevantTools(ctx, message, s.tools); err == nil {
+			out := make(map[string]Tool, len(scores))
+			for name := range scores {
+				if tool, ok := s.tools[name]; ok {
+					out[name] = tool
+				}
+			}
+			return out, scores
+		} else {
+			log.Printf("tool classifier error, falling back to keyword match: %v", err)
+		}
+	}
+	return s.keywordToolsForMessage(message), nil
+}
+
+// buildToolHintPrompt turns per-tool classifier confidence into a short
+// system-prompt note, so the LLM gets the classifier's signal instead of
+// just a filtered tool list. hints with no matching tool are skipped.
+func buildToolHintPrompt(hints map[string]float64, tools map[string]Tool) string {
+	if len(hints) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("A pre-classifier flagged these tools as likely relevant to the user's message (not certain, use your own judgment):\n")
+	wrote := false
+	for name, confidence := range hints {
+		if _, ok := tools[name]; !ok {
+			continue
+		}
+		fmt.Fprintf(&b, "- %s (confidence %.2f)\n", name, confidence)
+		wrote = true
+	}
+	if !wrote {
+		return ""
+	}
+	return strings.TrimSpace(b.String())
+}
+
+func (s *Service) keywordToolsForMessage(message Message) map[string]Tool {
 	normalized := normalizeToolMatchText(message.Content)
 	out := make(map[string]Tool)
 	for name, tool := range s.tools {

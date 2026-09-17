@@ -33,6 +33,10 @@ type Config struct {
 	GuildInstructions      map[string]string
 	LLMDebugHistory        bool
 	OwnerDiscordID         string
+	LLMJevAPIKey           string
+	LLMJevBaseURL          string
+	LLMJevModel            string
+	LLMJevTimeout          time.Duration
 }
 
 type fileConfig struct {
@@ -65,10 +69,14 @@ type awsFileConfig struct {
 }
 
 type llmFileConfig struct {
-	BaseURL string `yaml:"base_url"`
-	Model   string `yaml:"model"`
-	APIKey  string `yaml:"api_key"`
-	Timeout string `yaml:"timeout"`
+	BaseURL    string `yaml:"base_url"`
+	Model      string `yaml:"model"`
+	APIKey     string `yaml:"api_key"`
+	Timeout    string `yaml:"timeout"`
+	JevAPIKey  string `yaml:"jev_api_key"`
+	JevBaseURL string `yaml:"jev_base_url"`
+	JevModel   string `yaml:"jev_model"`
+	JevTimeout string `yaml:"jev_timeout"`
 }
 
 // Load keeps env-only behavior for backward compatibility
@@ -118,6 +126,10 @@ type envVals struct {
 	LLMTimeout             string
 	LLMDebugHistory        string
 	OwnerDiscordID         string
+	LLMJevAPIKey           string
+	LLMJevBaseURL          string
+	LLMJevModel            string
+	LLMJevTimeout          string
 }
 
 func osEnv() envVals {
@@ -143,6 +155,10 @@ func osEnv() envVals {
 		LLMTimeout:             os.Getenv("LLM_TIMEOUT"),
 		LLMDebugHistory:        os.Getenv("LLM_DEBUG_HISTORY"),
 		OwnerDiscordID:         os.Getenv("OWNER_DISCORD_ID"),
+		LLMJevAPIKey:           os.Getenv("LLM_JEV_API_KEY"),
+		LLMJevBaseURL:          os.Getenv("LLM_JEV_BASE_URL"),
+		LLMJevModel:            os.Getenv("LLM_JEV_MODEL"),
+		LLMJevTimeout:          os.Getenv("LLM_JEV_TIMEOUT"),
 	}
 }
 
@@ -192,6 +208,12 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 
 	testGuild := fallback(e.TestGuildID, f.TestGuildID, "")
 
+	jevTimeoutStr := fallback(e.LLMJevTimeout, f.LLM.JevTimeout, "15s")
+	jevTimeout := 15 * time.Second
+	if d, err := time.ParseDuration(jevTimeoutStr); err == nil {
+		jevTimeout = d
+	}
+
 	return Config{
 		DiscordToken:           token,
 		DatabasePath:           dbPath,
@@ -214,6 +236,10 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		GuildInstructions:      f.GuildInstructions,
 		LLMDebugHistory:        llmDebugHistory,
 		OwnerDiscordID:         strings.TrimSpace(fallback(e.OwnerDiscordID, f.OwnerDiscordID, "")),
+		LLMJevAPIKey:           fallback(e.LLMJevAPIKey, f.LLM.JevAPIKey, ""),
+		LLMJevBaseURL:          fallback(e.LLMJevBaseURL, f.LLM.JevBaseURL, ""),
+		LLMJevModel:            fallback(e.LLMJevModel, f.LLM.JevModel, ""),
+		LLMJevTimeout:          jevTimeout,
 	}, nil
 }
 

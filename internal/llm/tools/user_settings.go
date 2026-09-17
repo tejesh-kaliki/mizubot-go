@@ -21,7 +21,11 @@ func NewUserSettingsTools(service *usersettings.Service) []llm.Tool {
 			Description: "Set the current Discord user's timezone. Use IANA timezone names like Asia/Kolkata or America/Los_Angeles.",
 			Parameters:  json.RawMessage(`{"type":"object","required":["timezone"],"properties":{"timezone":{"type":"string","description":"IANA timezone name, for example Asia/Kolkata."}},"additionalProperties":false}`),
 			Keywords:    timezoneToolKeywords,
-			Execute:     setUserTimezone(service),
+			ClassifierHint: "The user wants to set or change their own timezone. This includes requests phrased as " +
+				`"change me to <zone>", "set my timezone to <zone>", or "I'm in <zone> now", ` +
+				"and covers common abbreviations and city/region names, not just IANA names " +
+				"(e.g. JST, IST, PST, EST, UTC, GMT, Tokyo, London, Kolkata), even without the word timezone.",
+			Execute: setUserTimezone(service),
 		},
 	}
 }

@@ -15,11 +15,14 @@ import (
 	"mizubot-go/internal/db"
 	"mizubot-go/internal/guildinstructions"
 	"mizubot-go/internal/llm"
+	"mizubot-go/internal/llm/classifier"
 	llmtools "mizubot-go/internal/llm/tools"
 	"mizubot-go/internal/llmstats"
 	"mizubot-go/internal/pagemonitor"
 	"mizubot-go/internal/reminders"
 	"mizubot-go/internal/scheduler"
+	"mizubot-go/internal/typesafe"
+	"mizubot-go/internal/typesafestats"
 	"mizubot-go/internal/usersettings"
 )
 
@@ -89,6 +92,18 @@ func main() {
 		APIKey:  cfg.LLMAPIKey,
 		Timeout: cfg.LLMTimeout,
 	}), guildInstructionStore, allTools...)
+
+	if cfg.LLMJevAPIKey != "" {
+		typeSafeClient := typesafe.NewClient(typesafe.Config{
+			APIKey:  cfg.LLMJevAPIKey,
+			BaseURL: cfg.LLMJevBaseURL,
+			Model:   cfg.LLMJevModel,
+			Timeout: cfg.LLMJevTimeout,
+		})
+		typeSafeStatsStore := typesafestats.NewStore(database)
+		llmService.SetToolClassifier(classifier.New(typeSafeClient, typeSafeStatsStore))
+		log.Printf("typesafe tool classifier enabled: model=%s", typeSafeClient.Model())
+	}
 
 	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore, guildInstructionStore, cfg.OwnerDiscordID)
 	if err != nil {

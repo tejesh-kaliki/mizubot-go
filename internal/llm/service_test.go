@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -230,6 +231,82 @@ func TestServiceIncludesKeywordToolsWhenMessageMatches(t *testing.T) {
 	}
 	if len(completer.chats[0].Tools) != 1 || completer.chats[0].Tools[0].Name != "keyword_tool" {
 		t.Fatalf("tools = %+v, want keyword_tool", completer.chats[0].Tools)
+	}
+}
+
+type fakeToolClassifier struct {
+	selected map[string]float64
+	err      error
+	calls    int
+}
+
+func (f *fakeToolClassifier) RelevantTools(_ context.Context, _ Message, _ map[string]Tool) (map[string]float64, error) {
+	f.calls++
+	return f.selected, f.err
+}
+
+func TestServiceUsesClassifierSelectedTools(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{{Content: "classified answer"}}}
+	service := NewService(completer, Tool{
+		Name:        "classifier_tool",
+		Description: "A tool picked by the classifier.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Keywords:    []string{"never matches this message"},
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "ok"}, nil
+		},
+	})
+	classifier := &fakeToolClassifier{selected: map[string]float64{"classifier_tool": 0.9}}
+	service.SetToolClassifier(classifier)
+
+	got, err := service.GenerateResponse(context.Background(), Message{Content: "some message"})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "classified answer" {
+		t.Fatalf("response = %q, want classified answer", got)
+	}
+	if classifier.calls != 1 {
+		t.Fatalf("classifier calls = %d, want 1", classifier.calls)
+	}
+	if len(completer.chats) != 1 || len(completer.chats[0].Tools) != 1 || completer.chats[0].Tools[0].Name != "classifier_tool" {
+		t.Fatalf("tools = %+v, want classifier_tool", completer.chats)
+	}
+	systemMsg := completer.chats[0].Messages[0]
+	if systemMsg.Role != "system" || !strings.Contains(systemMsg.Content, "classifier_tool (confidence 0.90)") {
+		t.Fatalf("system prompt missing classifier hint: %q", systemMsg.Content)
+	}
+}
+
+func TestServiceFallsBackToKeywordsWhenClassifierErrors(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{{Content: "keyword answer"}}}
+	service := NewService(completer, Tool{
+		Name:        "keyword_tool",
+		Description: "A keyword tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Keywords:    []string{"remind"},
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "ok"}, nil
+		},
+	})
+	classifier := &fakeToolClassifier{err: fmt.Errorf("boom")}
+	service.SetToolClassifier(classifier)
+
+	got, err := service.GenerateResponse(context.Background(), Message{Content: "remind me tomorrow"})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "keyword answer" {
+		t.Fatalf("response = %q, want keyword answer", got)
+	}
+	if classifier.calls != 1 {
+		t.Fatalf("classifier calls = %d, want 1", classifier.calls)
+	}
+	if len(completer.chats) != 1 || len(completer.chats[0].Tools) != 1 || completer.chats[0].Tools[0].Name != "keyword_tool" {
+		t.Fatalf("tools = %+v, want keyword_tool (fallback)", completer.chats)
+	}
+	if strings.Contains(completer.chats[0].Messages[0].Content, "pre-classifier flagged") {
+		t.Fatalf("system prompt should not include a classifier hint on keyword fallback: %q", completer.chats[0].Messages[0].Content)
 	}
 }
 

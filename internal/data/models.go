@@ -69,6 +69,24 @@ type Reminder struct {
 	Timezone  string  `json:"timezone"`
 }
 
+type TypesafeClassificationLog struct {
+	ID               int64   `json:"id"`
+	GuildID          *string `json:"guild_id"`
+	ChannelID        string  `json:"channel_id"`
+	UserID           string  `json:"user_id"`
+	Model            string  `json:"model"`
+	RequestState     string  `json:"request_state"`
+	RequestQuestions string  `json:"request_questions"`
+	ResponseAnswers  string  `json:"response_answers"`
+	SelectedTools    string  `json:"selected_tools"`
+	InputTokens      int64   `json:"input_tokens"`
+	OutputTokens     int64   `json:"output_tokens"`
+	LatencyMs        int64   `json:"latency_ms"`
+	Status           string  `json:"status"`
+	Error            string  `json:"error"`
+	CreatedAt        int64   `json:"created_at"`
+}
+
 type UserAnimeEntry struct {
 	ID                int64   `json:"id"`
 	UserID            string  `json:"user_id"`
