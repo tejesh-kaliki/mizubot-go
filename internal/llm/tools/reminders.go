@@ -28,21 +28,32 @@ func NewReminderTools(service *reminders.Service, settingsService ...*usersettin
 			Description: "Load the current Discord user's active reminders.",
 			Parameters:  json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`),
 			Keywords:    reminderToolKeywords,
-			Execute:     listReminders(service),
+			ClassifierHint: "The user is asking about their reminders: what they have set, whether one exists, " +
+				"or when something will remind them. This includes implicit follow-ups referring back to " +
+				"reminders already discussed (e.g. \"what about the other one\", \"did I still have one for X\"), " +
+				"not just explicit \"list my reminders\" requests.",
+			Execute: listReminders(service),
 		},
 		{
 			Name:        "reminder_create",
 			Description: "Create a reminder for the current Discord user. Infer a concise reminder message from the user's request unless they explicitly provide exact reminder text. LLM callers must provide normalized scheduling: cron_expr for repeated reminders, or once=true plus run_at for one-time reminders.",
 			Parameters:  json.RawMessage(`{"type":"object","required":["message","once"],"properties":{"message":{"type":"string","description":"Concise reminder text to send later. Infer the actual thing to remember, not the full user command. For example, 'remind me to take meds tomorrow' should use 'take meds'. If the user quotes or explicitly states exact reminder text, preserve it."},"once":{"type":"boolean","description":"true for a one-time reminder; false for a repeated reminder."},"run_at":{"type":"string","description":"Required when once=true. Use a duration like 10m, 2h, 3d, RFC3339, or YYYY-MM-DD HH:MM in the selected timezone."},"cron_expr":{"type":"string","description":"Required when once=false. Five-field cron expression in the selected timezone."},"timezone":{"type":"string","description":"Optional IANA timezone name. Defaults to the user's configured timezone, then UTC."},"channel_id":{"type":"string","description":"Discord channel ID. Optional; defaults to the current channel."}},"additionalProperties":false}`),
 			Keywords:    reminderToolKeywords,
-			Execute:     createReminder(service, settings),
+			ClassifierHint: "The user wants a new reminder, alarm, or notification set up, whether one-time or " +
+				"recurring. This includes casual phrasing like \"remind me to...\", \"don't let me forget...\", " +
+				"\"ping me when...\", or \"every day at...\".",
+			Execute: createReminder(service, settings),
 		},
 		{
 			Name:        "reminder_delete",
-			Description: "Delete one of the current Discord user's reminders by ID.",
-			Parameters:  json.RawMessage(`{"type":"object","required":["id"],"properties":{"id":{"type":"integer","description":"Reminder ID to delete."}},"additionalProperties":false}`),
+			Description: "Delete one or more of the current Discord user's reminders by ID.",
+			Parameters:  json.RawMessage(`{"type":"object","required":["ids"],"properties":{"ids":{"type":"array","items":{"type":"integer"},"minItems":1,"description":"Reminder IDs to delete. Pass every ID that should be removed in a single call, e.g. all IDs from a prior reminder_list_active result when the user asks to clear all reminders."}},"additionalProperties":false}`),
 			Keywords:    reminderToolKeywords,
-			Execute:     deleteReminder(service),
+			ClassifierHint: "The user wants to cancel, delete, remove, or clear one or more of their reminders. " +
+				"This includes explicit requests (\"delete reminder 3\", \"clear all my reminders\") and implicit " +
+				"follow-ups referring to a reminder already in the conversation (e.g. \"there's one more\", " +
+				"\"get rid of that one too\", \"cancel it\"), even without the word reminder or delete.",
+			Execute: deleteReminder(service),
 		},
 	}
 }
@@ -163,7 +174,7 @@ func discordTimestamp(t time.Time) string {
 }
 
 type reminderDeleteArgs struct {
-	ID int64 `json:"id"`
+	IDs []int64 `json:"ids"`
 }
 
 func deleteReminder(service *reminders.Service) llm.ToolHandler {
@@ -172,23 +183,33 @@ func deleteReminder(service *reminders.Service) llm.ToolHandler {
 		if err := json.Unmarshal(raw, &args); err != nil {
 			return llm.ToolResult{}, fmt.Errorf("invalid delete reminder arguments: %w", err)
 		}
-		if args.ID <= 0 {
-			return llm.ToolResult{}, fmt.Errorf("id must be positive")
+		if len(args.IDs) == 0 {
+			return llm.ToolResult{}, fmt.Errorf("ids must contain at least one reminder ID")
 		}
-		deleted, ok, err := service.DeleteReminderWithDetails(ctx, args.ID, toolCtx.UserID)
-		if err != nil {
-			return llm.ToolResult{}, err
+
+		var b strings.Builder
+		for _, id := range args.IDs {
+			if id <= 0 {
+				fmt.Fprintf(&b, "Invalid reminder ID %d.\n\n", id)
+				continue
+			}
+			deleted, ok, err := service.DeleteReminderWithDetails(ctx, id, toolCtx.UserID)
+			if err != nil {
+				return llm.ToolResult{}, err
+			}
+			if !ok {
+				fmt.Fprintf(&b, "Reminder ID %d was not found for this user.\n\n", id)
+				continue
+			}
+			fmt.Fprintf(&b, "Deleted reminder ID %d.\nMessage: %s\nNext run: %s\nChannel: %s\nTimezone: %s\nRepeat: %s\n\n",
+				deleted.ID,
+				deleted.Message,
+				discordTimestamp(deleted.NextRun),
+				deleted.ChannelID,
+				deleted.Timezone,
+				humanSchedule(deleted),
+			)
 		}
-		if !ok {
-			return llm.ToolResult{Content: fmt.Sprintf("Reminder ID %d was not found for this user.", args.ID)}, nil
-		}
-		return llm.ToolResult{Content: fmt.Sprintf("Deleted reminder ID %d.\nMessage: %s\nNext run: %s\nChannel: %s\nTimezone: %s\nRepeat: %s",
-			deleted.ID,
-			deleted.Message,
-			discordTimestamp(deleted.NextRun),
-			deleted.ChannelID,
-			deleted.Timezone,
-			humanSchedule(deleted),
-		)}, nil
+		return llm.ToolResult{Content: strings.TrimSpace(b.String())}, nil
 	}
 }
