@@ -22,6 +22,7 @@ type ClassificationLog struct {
 	GuildID          string
 	ChannelID        string
 	UserID           string
+	MessageID        string
 	Model            string
 	RequestState     string
 	RequestQuestions string
@@ -39,6 +40,7 @@ type CreateClassificationLogParams struct {
 	GuildID          string
 	ChannelID        string
 	UserID           string
+	MessageID        string
 	Model            string
 	RequestState     string
 	RequestQuestions string
@@ -70,6 +72,7 @@ func (s *Store) Create(ctx context.Context, params CreateClassificationLogParams
 		GuildID:          nullableString(params.GuildID),
 		ChannelID:        strings.TrimSpace(params.ChannelID),
 		UserID:           strings.TrimSpace(params.UserID),
+		MessageID:        strings.TrimSpace(params.MessageID),
 		Model:            strings.TrimSpace(params.Model),
 		RequestState:     params.RequestState,
 		RequestQuestions: params.RequestQuestions,
@@ -121,6 +124,7 @@ func convertClassificationLog(row data.TypesafeClassificationLog) Classification
 		GuildID:          guildID,
 		ChannelID:        row.ChannelID,
 		UserID:           row.UserID,
+		MessageID:        row.MessageID,
 		Model:            row.Model,
 		RequestState:     row.RequestState,
 		RequestQuestions: row.RequestQuestions,

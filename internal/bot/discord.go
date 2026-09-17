@@ -275,6 +275,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			BotName:   guildDisplayName(s, m.GuildID, s.State.User, nil),
 			ChannelID: m.ChannelID,
 			GuildID:   m.GuildID,
+			MessageID: m.ID,
 			Content:   messageTextWithDisplayNames(s, m.Message),
 			Timezone:  timezone,
 			Now:       startedAt,

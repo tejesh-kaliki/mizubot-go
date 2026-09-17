@@ -24,10 +24,11 @@ INSERT INTO typesafe_classification_logs(
     latency_ms,
     status,
     error,
-    created_at
+    created_at,
+    message_id
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id
 `
 
 type CreateTypeSafeClassificationLogParams struct {
@@ -45,6 +46,7 @@ type CreateTypeSafeClassificationLogParams struct {
 	Status           string  `json:"status"`
 	Error            string  `json:"error"`
 	CreatedAt        int64   `json:"created_at"`
+	MessageID        string  `json:"message_id"`
 }
 
 func (q *Queries) CreateTypeSafeClassificationLog(ctx context.Context, db DBTX, arg CreateTypeSafeClassificationLogParams) (TypesafeClassificationLog, error) {
@@ -63,6 +65,7 @@ func (q *Queries) CreateTypeSafeClassificationLog(ctx context.Context, db DBTX, 
 		arg.Status,
 		arg.Error,
 		arg.CreatedAt,
+		arg.MessageID,
 	)
 	var i TypesafeClassificationLog
 	err := row.Scan(
@@ -81,12 +84,13 @@ func (q *Queries) CreateTypeSafeClassificationLog(ctx context.Context, db DBTX, 
 		&i.Status,
 		&i.Error,
 		&i.CreatedAt,
+		&i.MessageID,
 	)
 	return i, err
 }
 
 const listTypeSafeClassificationLogsByGuild = `-- name: ListTypeSafeClassificationLogsByGuild :many
-SELECT id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at
+SELECT id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id
 FROM typesafe_classification_logs
 WHERE guild_id = ?
 ORDER BY created_at DESC
@@ -118,6 +122,7 @@ func (q *Queries) ListTypeSafeClassificationLogsByGuild(ctx context.Context, db 
 			&i.Status,
 			&i.Error,
 			&i.CreatedAt,
+			&i.MessageID,
 		); err != nil {
 			return nil, err
 		}

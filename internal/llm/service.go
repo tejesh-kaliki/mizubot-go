@@ -17,6 +17,7 @@ type Message struct {
 	BotName   string
 	ChannelID string
 	GuildID   string
+	MessageID string
 	Content   string
 	Timezone  string
 	Now       time.Time

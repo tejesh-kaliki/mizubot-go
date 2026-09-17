@@ -157,6 +157,7 @@ func (c *TypeSafeClassifier) logResult(
 		GuildID:          message.GuildID,
 		ChannelID:        message.ChannelID,
 		UserID:           message.UserID,
+		MessageID:        message.MessageID,
 		Model:            c.client.Model(),
 		RequestState:     string(stateJSON),
 		RequestQuestions: string(questionsJSON),
