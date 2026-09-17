@@ -11,10 +11,20 @@ import (
 	"testing"
 	"time"
 
+	"mizubot-go/internal/guildflags"
 	"mizubot-go/internal/llm"
 	"mizubot-go/internal/typesafe"
 	"mizubot-go/internal/typesafestats"
 )
+
+type fakeFlagProvider struct {
+	flags []guildflags.Flag
+	err   error
+}
+
+func (f *fakeFlagProvider) ListByGuild(_ context.Context, _ string) ([]guildflags.Flag, error) {
+	return f.flags, f.err
+}
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
@@ -31,7 +41,7 @@ func (f *fakeLogger) Create(_ context.Context, params typesafestats.CreateClassi
 	return typesafestats.ClassificationLog{}, nil
 }
 
-func TestTypeSafeClassifierRelevantTools(t *testing.T) {
+func TestTypeSafeClassifierClassifiesTools(t *testing.T) {
 	var gotReq typesafe.EvaluateRequest
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
@@ -60,22 +70,23 @@ func TestTypeSafeClassifierRelevantTools(t *testing.T) {
 		HTTPClient: &http.Client{Transport: transport},
 	})
 	logger := &fakeLogger{}
-	c := New(client, logger)
+	c := New(client, logger, nil)
 
 	tools := map[string]llm.Tool{
 		"reminder_tool": {Name: "reminder_tool", Description: "Manages reminders."},
 		"weather_tool":  {Name: "weather_tool", Description: "Gets weather."},
 	}
 
-	selected, err := c.RelevantTools(context.Background(), llm.Message{
+	result, err := c.Classify(context.Background(), llm.Message{
 		Content:   "remind me to drink water",
 		GuildID:   "guild-1",
 		ChannelID: "chan-1",
 		UserID:    "user-1",
 	}, tools)
 	if err != nil {
-		t.Fatalf("RelevantTools() error = %v", err)
+		t.Fatalf("Classify() error = %v", err)
 	}
+	selected := result.Tools
 	if confidence, ok := selected["reminder_tool"]; !ok || confidence != 0.9 {
 		t.Fatalf("selected = %+v, want reminder_tool with confidence 0.9", selected)
 	}
@@ -125,19 +136,19 @@ func TestTypeSafeClassifierSendsCappedHistory(t *testing.T) {
 		Timeout:    time.Second,
 		HTTPClient: &http.Client{Transport: transport},
 	})
-	c := New(client, nil)
+	c := New(client, nil, nil)
 
 	history := make([]llm.HistoryMessage, 0, 10)
 	for i := range 10 {
 		history = append(history, llm.HistoryMessage{Author: "user", Content: fmt.Sprintf("turn %d", i)})
 	}
 
-	_, err := c.RelevantTools(context.Background(), llm.Message{
+	_, err := c.Classify(context.Background(), llm.Message{
 		Content: "latest message",
 		History: history,
 	}, map[string]llm.Tool{"tool_a": {Name: "tool_a", Description: "desc"}})
 	if err != nil {
-		t.Fatalf("RelevantTools() error = %v", err)
+		t.Fatalf("Classify() error = %v", err)
 	}
 
 	state, ok := gotReq.State.(map[string]any)
@@ -184,9 +195,9 @@ func TestTypeSafeClassifierPrefersClassifierHintOverDescription(t *testing.T) {
 		Timeout:    time.Second,
 		HTTPClient: &http.Client{Transport: transport},
 	})
-	c := New(client, nil)
+	c := New(client, nil, nil)
 
-	_, err := c.RelevantTools(context.Background(), llm.Message{Content: "change me to jst"}, map[string]llm.Tool{
+	_, err := c.Classify(context.Background(), llm.Message{Content: "change me to jst"}, map[string]llm.Tool{
 		"tz_tool": {
 			Name:           "tz_tool",
 			Description:    "Set the user's timezone. Use IANA names like Asia/Kolkata.",
@@ -194,7 +205,7 @@ func TestTypeSafeClassifierPrefersClassifierHintOverDescription(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("RelevantTools() error = %v", err)
+		t.Fatalf("Classify() error = %v", err)
 	}
 
 	question := gotReq.Questions["tz_tool"]
@@ -234,20 +245,78 @@ func TestTypeSafeClassifierAddsImpliedToolsBelowThreshold(t *testing.T) {
 		Timeout:    time.Second,
 		HTTPClient: &http.Client{Transport: transport},
 	})
-	c := New(client, nil)
+	c := New(client, nil, nil)
 
-	selected, err := c.RelevantTools(context.Background(), llm.Message{Content: "clear all my reminders"}, map[string]llm.Tool{
+	result, err := c.Classify(context.Background(), llm.Message{Content: "clear all my reminders"}, map[string]llm.Tool{
 		"reminder_delete":      {Name: "reminder_delete", Description: "desc", ImpliesTools: []string{"reminder_list_active"}},
 		"reminder_list_active": {Name: "reminder_list_active", Description: "desc"},
 	})
 	if err != nil {
-		t.Fatalf("RelevantTools() error = %v", err)
+		t.Fatalf("Classify() error = %v", err)
 	}
+	selected := result.Tools
 	if confidence, ok := selected["reminder_delete"]; !ok || confidence != 0.97 {
 		t.Fatalf("selected = %+v, want reminder_delete with confidence 0.97", selected)
 	}
 	if confidence, ok := selected["reminder_list_active"]; !ok || confidence != 0.44 {
 		t.Fatalf("selected = %+v, want reminder_list_active pulled in below threshold with confidence 0.44", selected)
+	}
+}
+
+func TestTypeSafeClassifierMatchesGuildFlags(t *testing.T) {
+	var gotReq typesafe.EvaluateRequest
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		var body bytes.Buffer
+		_ = json.NewEncoder(&body).Encode(map[string]any{
+			"model": "jev-latest",
+			"answers": map[string]any{
+				"tool_a":                 map[string]any{"type": "noul", "noul": 0.1},
+				"flag::restricted_topic": map[string]any{"type": "noul", "noul": 0.93},
+			},
+			"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(&body),
+			Header:     make(http.Header),
+		}, nil
+	})
+	client := typesafe.NewClient(typesafe.Config{
+		APIKey:     "test-key",
+		Timeout:    time.Second,
+		HTTPClient: &http.Client{Transport: transport},
+	})
+	logger := &fakeLogger{}
+	flags := &fakeFlagProvider{flags: []guildflags.Flag{
+		{Name: "restricted_topic", Description: "Mentions the restricted show.", Guidance: "Refuse briefly, do not name the show."},
+	}}
+	c := New(client, logger, flags)
+
+	result, err := c.Classify(context.Background(), llm.Message{Content: "let's talk about the show", GuildID: "guild-1"}, map[string]llm.Tool{
+		"tool_a": {Name: "tool_a", Description: "desc"},
+	})
+	if err != nil {
+		t.Fatalf("Classify() error = %v", err)
+	}
+	if len(result.Tools) != 0 {
+		t.Fatalf("tools = %+v, want none selected", result.Tools)
+	}
+	if len(result.Flags) != 1 || result.Flags[0].Name != "restricted_topic" || result.Flags[0].Guidance != "Refuse briefly, do not name the show." {
+		t.Fatalf("flags = %+v, want restricted_topic matched with its guidance", result.Flags)
+	}
+	if _, ok := gotReq.Questions["flag::restricted_topic"]; !ok {
+		t.Fatalf("questions = %+v, want a flag question sent", gotReq.Questions)
+	}
+
+	if len(logger.params) != 1 {
+		t.Fatalf("log calls = %d, want 1", len(logger.params))
+	}
+	if !strings.Contains(logger.params[0].MatchedFlags, "restricted_topic") {
+		t.Fatalf("logged matched flags = %q, want restricted_topic", logger.params[0].MatchedFlags)
 	}
 }
 
@@ -266,9 +335,9 @@ func TestTypeSafeClassifierLogsErrors(t *testing.T) {
 		HTTPClient: &http.Client{Transport: transport},
 	})
 	logger := &fakeLogger{}
-	c := New(client, logger)
+	c := New(client, logger, nil)
 
-	_, err := c.RelevantTools(context.Background(), llm.Message{Content: "hi"}, map[string]llm.Tool{
+	_, err := c.Classify(context.Background(), llm.Message{Content: "hi"}, map[string]llm.Tool{
 		"tool_a": {Name: "tool_a", Description: "desc"},
 	})
 	if err == nil {

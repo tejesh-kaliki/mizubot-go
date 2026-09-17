@@ -1,8 +1,9 @@
 // Package classifier implements llm.ToolClassifier using the TypeSafe
-// evaluation API: one "noul" (yes/no) question per candidate tool, asked in
-// a single request, replacing the substring keyword match. Every request
-// and response is logged (including token usage) via the supplied Logger,
-// so the jev model's routing behavior can be inspected after the fact.
+// evaluation API: one "noul" (yes/no) question per candidate tool, plus one
+// per guild content flag (see guildflags), all asked in a single request,
+// replacing the substring keyword match. Every request and response is
+// logged (including token usage) via the supplied Logger, so the jev
+// model's routing and flagging behavior can be inspected after the fact.
 package classifier
 
 import (
@@ -12,6 +13,7 @@ import (
 	"log"
 	"time"
 
+	"mizubot-go/internal/guildflags"
 	"mizubot-go/internal/llm"
 	"mizubot-go/internal/typesafe"
 	"mizubot-go/internal/typesafestats"
@@ -21,6 +23,12 @@ import (
 // satisfies this.
 type Logger interface {
 	Create(ctx context.Context, params typesafestats.CreateClassificationLogParams) (typesafestats.ClassificationLog, error)
+}
+
+// FlagProvider loads a guild's content flags. guildflags.Store satisfies
+// this.
+type FlagProvider interface {
+	ListByGuild(ctx context.Context, guildID string) ([]guildflags.Flag, error)
 }
 
 // relevanceThreshold is the minimum "yes" probability for a tool to be
@@ -67,25 +75,44 @@ func buildState(message llm.Message) classificationState {
 type TypeSafeClassifier struct {
 	client *typesafe.Client
 	logger Logger
+	flags  FlagProvider
 }
 
-func New(client *typesafe.Client, logger Logger) *TypeSafeClassifier {
-	return &TypeSafeClassifier{client: client, logger: logger}
+func New(client *typesafe.Client, logger Logger, flags FlagProvider) *TypeSafeClassifier {
+	return &TypeSafeClassifier{client: client, logger: logger, flags: flags}
 }
 
-// RelevantTools asks one noul question per tool ("should this tool be used
-// to help answer this message?") in a single TypeSafe request and returns
-// the tools it judged relevant, keyed by name, with the model's confidence
-// (the "yes" probability) that the tool applies.
-func (c *TypeSafeClassifier) RelevantTools(ctx context.Context, message llm.Message, tools map[string]llm.Tool) (map[string]float64, error) {
+// flagQuestionKey namespaces a guild flag's TypeSafe question id so it can
+// never collide with a tool name.
+func flagQuestionKey(flagName string) string {
+	return "flag::" + flagName
+}
+
+// Classify asks one noul question per tool ("should this tool be used to
+// help answer this message?") plus one noul question per guild content
+// flag ("does this message trigger this flag?"), in a single TypeSafe
+// request. It returns the tools judged relevant (keyed by name, with the
+// model's confidence) and the flags judged to apply (with their guidance).
+func (c *TypeSafeClassifier) Classify(ctx context.Context, message llm.Message, tools map[string]llm.Tool) (llm.ClassificationResult, error) {
 	if c == nil || c.client == nil {
-		return nil, fmt.Errorf("typesafe classifier: not configured")
-	}
-	if len(tools) == 0 {
-		return nil, nil
+		return llm.ClassificationResult{}, fmt.Errorf("typesafe classifier: not configured")
 	}
 
-	questions := make(map[string]typesafe.Question, len(tools))
+	var guildFlags []guildflags.Flag
+	if c.flags != nil && message.GuildID != "" {
+		loaded, err := c.flags.ListByGuild(ctx, message.GuildID)
+		if err != nil {
+			log.Printf("typesafe classifier: failed to load guild flags for guild_id=%s: %v", message.GuildID, err)
+		} else {
+			guildFlags = loaded
+		}
+	}
+
+	if len(tools) == 0 && len(guildFlags) == 0 {
+		return llm.ClassificationResult{}, nil
+	}
+
+	questions := make(map[string]typesafe.Question, len(tools)+len(guildFlags))
 	for name, tool := range tools {
 		hint := tool.ClassifierHint
 		if hint == "" {
@@ -100,6 +127,19 @@ func (c *TypeSafeClassifier) RelevantTools(ctx context.Context, message llm.Mess
 			},
 		}
 	}
+	flagsByKey := make(map[string]guildflags.Flag, len(guildFlags))
+	for _, flag := range guildFlags {
+		key := flagQuestionKey(flag.Name)
+		flagsByKey[key] = flag
+		questions[key] = typesafe.Question{
+			Type:         typesafe.QuestionNoul,
+			Instructions: fmt.Sprintf("Does this message trigger the %q content flag?", flag.Name),
+			Criteria: map[string]string{
+				"true":  flag.Description,
+				"false": "This flag does not apply to the message.",
+			},
+		}
+	}
 
 	state := buildState(message)
 	stateJSON, _ := json.Marshal(state)
@@ -110,7 +150,9 @@ func (c *TypeSafeClassifier) RelevantTools(ctx context.Context, message llm.Mess
 
 	status := typesafestats.StatusSuccess
 	errMsg := ""
-	selected := make(map[string]float64)
+	selectedTools := make(map[string]float64)
+	var matchedFlags []llm.MatchedFlag
+	var matchedFlagNames []string
 	var responseJSON []byte
 	if evalErr != nil {
 		status = typesafestats.StatusError
@@ -118,19 +160,34 @@ func (c *TypeSafeClassifier) RelevantTools(ctx context.Context, message llm.Mess
 	} else {
 		for name := range tools {
 			if answer, ok := resp.Answers[name]; ok && answer.Noul != nil && *answer.Noul >= relevanceThreshold {
-				selected[name] = *answer.Noul
+				selectedTools[name] = *answer.Noul
 			}
 		}
-		addImpliedTools(selected, tools, resp.Answers)
+		addImpliedTools(selectedTools, tools, resp.Answers)
+
+		for key, flag := range flagsByKey {
+			answer, ok := resp.Answers[key]
+			if !ok || answer.Noul == nil || *answer.Noul < relevanceThreshold {
+				continue
+			}
+			matchedFlags = append(matchedFlags, llm.MatchedFlag{
+				Name:       flag.Name,
+				Guidance:   flag.Guidance,
+				Confidence: *answer.Noul,
+			})
+			matchedFlagNames = append(matchedFlagNames, flag.Name)
+		}
+
 		responseJSON, _ = json.Marshal(resp.Answers)
 	}
 
-	c.logResult(ctx, message, stateJSON, questions, responseJSON, selected, resp.Usage, latency, status, errMsg)
+	matchedFlagsJSON, _ := json.Marshal(matchedFlagNames)
+	c.logResult(ctx, message, stateJSON, questions, responseJSON, selectedTools, string(matchedFlagsJSON), resp.Usage, latency, status, errMsg)
 
 	if evalErr != nil {
-		return nil, evalErr
+		return llm.ClassificationResult{}, evalErr
 	}
-	return selected, nil
+	return llm.ClassificationResult{Tools: selectedTools, Flags: matchedFlags}, nil
 }
 
 // addImpliedTools pulls in any tool named by a selected tool's ImpliesTools,
@@ -166,6 +223,7 @@ func (c *TypeSafeClassifier) logResult(
 	questions map[string]typesafe.Question,
 	responseJSON []byte,
 	selected map[string]float64,
+	matchedFlagsJSON string,
 	usage typesafe.Usage,
 	latency time.Duration,
 	status, errMsg string,
@@ -190,6 +248,7 @@ func (c *TypeSafeClassifier) logResult(
 		RequestQuestions: string(questionsJSON),
 		ResponseAnswers:  string(responseJSON),
 		SelectedTools:    string(selectedJSON),
+		MatchedFlags:     matchedFlagsJSON,
 		InputTokens:      usage.InputTokens,
 		OutputTokens:     usage.OutputTokens,
 		Latency:          latency,

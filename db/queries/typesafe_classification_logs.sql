@@ -14,13 +14,14 @@ INSERT INTO typesafe_classification_logs(
     status,
     error,
     created_at,
-    message_id
+    message_id,
+    matched_flags
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id;
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id, matched_flags;
 
 -- name: ListTypeSafeClassificationLogsByGuild :many
-SELECT id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id
+SELECT id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id, matched_flags
 FROM typesafe_classification_logs
 WHERE guild_id = ?
 ORDER BY created_at DESC

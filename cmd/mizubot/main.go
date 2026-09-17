@@ -13,6 +13,7 @@ import (
 	"mizubot-go/internal/bot"
 	"mizubot-go/internal/config"
 	"mizubot-go/internal/db"
+	"mizubot-go/internal/guildflags"
 	"mizubot-go/internal/guildinstructions"
 	"mizubot-go/internal/llm"
 	"mizubot-go/internal/llm/classifier"
@@ -101,7 +102,8 @@ func main() {
 			Timeout: cfg.LLMJevTimeout,
 		})
 		typeSafeStatsStore := typesafestats.NewStore(database)
-		llmService.SetToolClassifier(classifier.New(typeSafeClient, typeSafeStatsStore))
+		guildFlagsStore := guildflags.NewStore(database)
+		llmService.SetToolClassifier(classifier.New(typeSafeClient, typeSafeStatsStore, guildFlagsStore))
 		log.Printf("typesafe tool classifier enabled: model=%s", typeSafeClient.Model())
 	}
 

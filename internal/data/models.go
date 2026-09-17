@@ -4,6 +4,16 @@
 
 package data
 
+type GuildFlag struct {
+	ID          int64  `json:"id"`
+	GuildID     string `json:"guild_id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Guidance    string `json:"guidance"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
 type GuildInstruction struct {
 	GuildID      string `json:"guild_id"`
 	Instructions string `json:"instructions"`
@@ -86,6 +96,7 @@ type TypesafeClassificationLog struct {
 	Error            string  `json:"error"`
 	CreatedAt        int64   `json:"created_at"`
 	MessageID        string  `json:"message_id"`
+	MatchedFlags     string  `json:"matched_flags"`
 }
 
 type UserAnimeEntry struct {

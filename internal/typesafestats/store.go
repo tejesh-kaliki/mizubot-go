@@ -28,6 +28,7 @@ type ClassificationLog struct {
 	RequestQuestions string
 	ResponseAnswers  string
 	SelectedTools    string
+	MatchedFlags     string
 	InputTokens      int64
 	OutputTokens     int64
 	Latency          time.Duration
@@ -46,6 +47,7 @@ type CreateClassificationLogParams struct {
 	RequestQuestions string
 	ResponseAnswers  string
 	SelectedTools    string
+	MatchedFlags     string
 	InputTokens      int64
 	OutputTokens     int64
 	Latency          time.Duration
@@ -78,6 +80,7 @@ func (s *Store) Create(ctx context.Context, params CreateClassificationLogParams
 		RequestQuestions: params.RequestQuestions,
 		ResponseAnswers:  params.ResponseAnswers,
 		SelectedTools:    params.SelectedTools,
+		MatchedFlags:     params.MatchedFlags,
 		InputTokens:      params.InputTokens,
 		OutputTokens:     params.OutputTokens,
 		LatencyMs:        params.Latency.Milliseconds(),
@@ -130,6 +133,7 @@ func convertClassificationLog(row data.TypesafeClassificationLog) Classification
 		RequestQuestions: row.RequestQuestions,
 		ResponseAnswers:  row.ResponseAnswers,
 		SelectedTools:    row.SelectedTools,
+		MatchedFlags:     row.MatchedFlags,
 		InputTokens:      row.InputTokens,
 		OutputTokens:     row.OutputTokens,
 		Latency:          time.Duration(row.LatencyMs) * time.Millisecond,

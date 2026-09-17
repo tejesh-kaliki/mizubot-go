@@ -131,13 +131,29 @@ type GuildInstructionProvider interface {
 	GetGuildInstruction(ctx context.Context, guildID string) (string, bool, error)
 }
 
-// ToolClassifier decides which tools are relevant to a message, as a
-// smarter alternative to keyword matching. If it returns an error,
-// toolsForMessage falls back to keyword matching for that message. The
-// returned map holds one entry per relevant tool, keyed by tool name, with
-// the classifier's confidence (0-1) that the tool applies.
+// MatchedFlag is a guild-defined content flag (see guildflags) that the
+// classifier judged relevant to a message. Guidance is injected into the
+// system prompt verbatim as a required rule for that response.
+type MatchedFlag struct {
+	Name       string
+	Guidance   string
+	Confidence float64
+}
+
+// ClassificationResult is what a ToolClassifier returns for one message:
+// which tools are relevant (with confidence), and which guild flags fired.
+type ClassificationResult struct {
+	Tools map[string]float64
+	Flags []MatchedFlag
+}
+
+// ToolClassifier decides which tools and guild flags are relevant to a
+// message, as a smarter alternative to keyword matching. If it returns an
+// error, classifyMessage falls back to keyword matching for tools (and no
+// flags) for that message. Tools are keyed by tool name, with the
+// classifier's confidence (0-1) that the tool applies.
 type ToolClassifier interface {
-	RelevantTools(ctx context.Context, message Message, tools map[string]Tool) (map[string]float64, error)
+	Classify(ctx context.Context, message Message, tools map[string]Tool) (ClassificationResult, error)
 }
 
 type Service struct {
@@ -200,9 +216,9 @@ func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Messa
 	if message.Content == "" {
 		return Response{}, nil
 	}
-	tools, hints := s.toolsForMessage(ctx, message)
+	tools, hints, flags := s.classifyMessage(ctx, message)
 	if len(tools) == 0 {
-		systemPrompt, err := s.buildSystemPrompt(ctx, message)
+		systemPrompt, err := s.buildSystemPrompt(ctx, message, flags)
 		if err != nil {
 			return Response{}, err
 		}
@@ -216,7 +232,7 @@ func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Messa
 		result.LLMTurns = 1
 		return result, nil
 	}
-	return s.generateWithTools(ctx, message, tools, hints)
+	return s.generateWithTools(ctx, message, tools, hints, flags)
 }
 
 type toolDecision struct {
@@ -235,12 +251,12 @@ type toolExecutionResult struct {
 	Error  string `json:"error,omitempty"`
 }
 
-func (s *Service) generateWithTools(ctx context.Context, message Message, tools map[string]Tool, hints map[string]float64) (Response, error) {
+func (s *Service) generateWithTools(ctx context.Context, message Message, tools map[string]Tool, hints map[string]float64, flags []MatchedFlag) (Response, error) {
 	if chatCompleter, ok := s.completer.(ChatCompleter); ok {
-		return s.generateWithNativeTools(ctx, chatCompleter, message, tools, hints)
+		return s.generateWithNativeTools(ctx, chatCompleter, message, tools, hints, flags)
 	}
 
-	systemPrompt, err := s.buildToolSystemPrompt(ctx, message, tools)
+	systemPrompt, err := s.buildToolSystemPrompt(ctx, message, tools, flags)
 	if err != nil {
 		return Response{}, err
 	}
@@ -289,7 +305,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	if err != nil {
 		return Response{}, fmt.Errorf("marshal tool results: %w", err)
 	}
-	systemPrompt, err = s.buildSystemPrompt(ctx, message)
+	systemPrompt, err = s.buildSystemPrompt(ctx, message, flags)
 	if err != nil {
 		return Response{}, err
 	}
@@ -306,9 +322,9 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	return finalResponse, nil
 }
 
-func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message, tools map[string]Tool, hints map[string]float64) (Response, error) {
+func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter ChatCompleter, message Message, tools map[string]Tool, hints map[string]float64, flags []MatchedFlag) (Response, error) {
 	selectedChatTools := chatTools(tools)
-	systemPrompt, err := s.buildSystemPrompt(ctx, message)
+	systemPrompt, err := s.buildSystemPrompt(ctx, message, flags)
 	if err != nil {
 		return Response{}, err
 	}
@@ -434,24 +450,43 @@ func addUsage(a, b Usage) Usage {
 	}
 }
 
-func (s *Service) toolsForMessage(ctx context.Context, message Message) (map[string]Tool, map[string]float64) {
+func (s *Service) classifyMessage(ctx context.Context, message Message) (map[string]Tool, map[string]float64, []MatchedFlag) {
 	if len(s.tools) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	if s.toolClassifier != nil {
-		if scores, err := s.toolClassifier.RelevantTools(ctx, message, s.tools); err == nil {
-			out := make(map[string]Tool, len(scores))
-			for name := range scores {
+		if result, err := s.toolClassifier.Classify(ctx, message, s.tools); err == nil {
+			out := make(map[string]Tool, len(result.Tools))
+			for name := range result.Tools {
 				if tool, ok := s.tools[name]; ok {
 					out[name] = tool
 				}
 			}
-			return out, scores
+			return out, result.Tools, result.Flags
 		} else {
 			log.Printf("tool classifier error, falling back to keyword match: %v", err)
 		}
 	}
-	return s.keywordToolsForMessage(message), nil
+	return s.keywordToolsForMessage(message), nil, nil
+}
+
+// buildFlagPrompt turns matched guild flags into a required-rules block for
+// the system prompt. Unlike tool hints, flag guidance is not a suggestion:
+// the LLM must follow it for this response.
+func buildFlagPrompt(flags []MatchedFlag) string {
+	if len(flags) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("The following rules were flagged as applicable to this message and must be followed exactly:\n")
+	for _, flag := range flags {
+		guidance := strings.TrimSpace(flag.Guidance)
+		if guidance == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "- %s\n", guidance)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // buildToolHintPrompt turns per-tool classifier confidence into a short
@@ -531,27 +566,27 @@ func parseToolDecision(raw string) (toolDecision, bool) {
 	return decision, true
 }
 
-func (s *Service) buildSystemPrompt(ctx context.Context, message Message) (string, error) {
+func (s *Service) buildSystemPrompt(ctx context.Context, message Message, flags []MatchedFlag) (string, error) {
 	prompt := buildSystemPrompt(message.BotName)
-	if s.guildInstructionProvider == nil {
-		return prompt, nil
+	if s.guildInstructionProvider != nil {
+		instruction, ok, err := s.guildInstructionProvider.GetGuildInstruction(ctx, message.GuildID)
+		if err != nil {
+			return "", fmt.Errorf("load guild instructions: %w", err)
+		}
+		if ok {
+			if instruction = strings.TrimSpace(instruction); instruction != "" {
+				prompt += "\n\nServer-specific instructions:\n" + instruction
+			}
+		}
 	}
-	instruction, ok, err := s.guildInstructionProvider.GetGuildInstruction(ctx, message.GuildID)
-	if err != nil {
-		return "", fmt.Errorf("load guild instructions: %w", err)
+	if flagPrompt := buildFlagPrompt(flags); flagPrompt != "" {
+		prompt += "\n\n" + flagPrompt
 	}
-	if !ok {
-		return prompt, nil
-	}
-	instruction = strings.TrimSpace(instruction)
-	if instruction == "" {
-		return prompt, nil
-	}
-	return prompt + "\n\nServer-specific instructions:\n" + instruction, nil
+	return prompt, nil
 }
 
-func (s *Service) buildToolSystemPrompt(ctx context.Context, message Message, tools map[string]Tool) (string, error) {
-	systemPrompt, err := s.buildSystemPrompt(ctx, message)
+func (s *Service) buildToolSystemPrompt(ctx context.Context, message Message, tools map[string]Tool, flags []MatchedFlag) (string, error) {
+	systemPrompt, err := s.buildSystemPrompt(ctx, message, flags)
 	if err != nil {
 		return "", err
 	}

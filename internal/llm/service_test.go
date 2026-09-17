@@ -236,13 +236,17 @@ func TestServiceIncludesKeywordToolsWhenMessageMatches(t *testing.T) {
 
 type fakeToolClassifier struct {
 	selected map[string]float64
+	flags    []MatchedFlag
 	err      error
 	calls    int
 }
 
-func (f *fakeToolClassifier) RelevantTools(_ context.Context, _ Message, _ map[string]Tool) (map[string]float64, error) {
+func (f *fakeToolClassifier) Classify(_ context.Context, _ Message, _ map[string]Tool) (ClassificationResult, error) {
 	f.calls++
-	return f.selected, f.err
+	if f.err != nil {
+		return ClassificationResult{}, f.err
+	}
+	return ClassificationResult{Tools: f.selected, Flags: f.flags}, nil
 }
 
 func TestServiceUsesClassifierSelectedTools(t *testing.T) {
@@ -307,6 +311,37 @@ func TestServiceFallsBackToKeywordsWhenClassifierErrors(t *testing.T) {
 	}
 	if strings.Contains(completer.chats[0].Messages[0].Content, "pre-classifier flagged") {
 		t.Fatalf("system prompt should not include a classifier hint on keyword fallback: %q", completer.chats[0].Messages[0].Content)
+	}
+}
+
+func TestServiceInjectsMatchedFlagGuidance(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{{Content: "flagged answer"}}}
+	service := NewService(completer, Tool{
+		Name:        "classifier_tool",
+		Description: "A tool.",
+		Parameters:  json.RawMessage(`{"type":"object"}`),
+		Execute: func(_ context.Context, _ ToolContext, _ json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "ok"}, nil
+		},
+	})
+	classifier := &fakeToolClassifier{
+		selected: map[string]float64{"classifier_tool": 0.8},
+		flags: []MatchedFlag{
+			{Name: "restricted_topic", Guidance: "Refuse briefly without naming the topic.", Confidence: 0.95},
+		},
+	}
+	service.SetToolClassifier(classifier)
+
+	got, err := service.GenerateResponse(context.Background(), Message{Content: "some message"})
+	if err != nil {
+		t.Fatalf("GenerateResponse: %v", err)
+	}
+	if got != "flagged answer" {
+		t.Fatalf("response = %q, want flagged answer", got)
+	}
+	systemMsg := completer.chats[0].Messages[0]
+	if !strings.Contains(systemMsg.Content, "Refuse briefly without naming the topic.") {
+		t.Fatalf("system prompt missing flag guidance: %q", systemMsg.Content)
 	}
 }
 
