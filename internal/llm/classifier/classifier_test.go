@@ -211,6 +211,46 @@ func TestTypeSafeClassifierPrefersClassifierHintOverDescription(t *testing.T) {
 	}
 }
 
+func TestTypeSafeClassifierAddsImpliedToolsBelowThreshold(t *testing.T) {
+	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		var body bytes.Buffer
+		_ = json.NewEncoder(&body).Encode(map[string]any{
+			"model": "jev-latest",
+			"answers": map[string]any{
+				"reminder_delete":      map[string]any{"type": "noul", "noul": 0.97},
+				"reminder_list_active": map[string]any{"type": "noul", "noul": 0.44},
+			},
+			"usage": map[string]any{"input_tokens": 1, "output_tokens": 1},
+		})
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Body:       io.NopCloser(&body),
+			Header:     make(http.Header),
+		}, nil
+	})
+	client := typesafe.NewClient(typesafe.Config{
+		APIKey:     "test-key",
+		Timeout:    time.Second,
+		HTTPClient: &http.Client{Transport: transport},
+	})
+	c := New(client, nil)
+
+	selected, err := c.RelevantTools(context.Background(), llm.Message{Content: "clear all my reminders"}, map[string]llm.Tool{
+		"reminder_delete":      {Name: "reminder_delete", Description: "desc", ImpliesTools: []string{"reminder_list_active"}},
+		"reminder_list_active": {Name: "reminder_list_active", Description: "desc"},
+	})
+	if err != nil {
+		t.Fatalf("RelevantTools() error = %v", err)
+	}
+	if confidence, ok := selected["reminder_delete"]; !ok || confidence != 0.97 {
+		t.Fatalf("selected = %+v, want reminder_delete with confidence 0.97", selected)
+	}
+	if confidence, ok := selected["reminder_list_active"]; !ok || confidence != 0.44 {
+		t.Fatalf("selected = %+v, want reminder_list_active pulled in below threshold with confidence 0.44", selected)
+	}
+}
+
 func TestTypeSafeClassifierLogsErrors(t *testing.T) {
 	transport := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{

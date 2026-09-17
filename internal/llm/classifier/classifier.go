@@ -121,6 +121,7 @@ func (c *TypeSafeClassifier) RelevantTools(ctx context.Context, message llm.Mess
 				selected[name] = *answer.Noul
 			}
 		}
+		addImpliedTools(selected, tools, resp.Answers)
 		responseJSON, _ = json.Marshal(resp.Answers)
 	}
 
@@ -130,6 +131,32 @@ func (c *TypeSafeClassifier) RelevantTools(ctx context.Context, message llm.Mess
 		return nil, evalErr
 	}
 	return selected, nil
+}
+
+// addImpliedTools pulls in any tool named by a selected tool's ImpliesTools,
+// using its own answered confidence if TypeSafe scored it, or 0 (below
+// threshold, but present) if it wasn't scored highly enough to be selected
+// on its own.
+func addImpliedTools(selected map[string]float64, tools map[string]llm.Tool, answers map[string]typesafe.Answer) {
+	for name := range selected {
+		tool, ok := tools[name]
+		if !ok {
+			continue
+		}
+		for _, implied := range tool.ImpliesTools {
+			if _, ok := tools[implied]; !ok {
+				continue
+			}
+			if _, already := selected[implied]; already {
+				continue
+			}
+			confidence := 0.0
+			if answer, ok := answers[implied]; ok && answer.Noul != nil {
+				confidence = *answer.Noul
+			}
+			selected[implied] = confidence
+		}
+	}
 }
 
 func (c *TypeSafeClassifier) logResult(

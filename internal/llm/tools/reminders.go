@@ -53,7 +53,8 @@ func NewReminderTools(service *reminders.Service, settingsService ...*usersettin
 				"This includes explicit requests (\"delete reminder 3\", \"clear all my reminders\") and implicit " +
 				"follow-ups referring to a reminder already in the conversation (e.g. \"there's one more\", " +
 				"\"get rid of that one too\", \"cancel it\"), even without the word reminder or delete.",
-			Execute: deleteReminder(service),
+			ImpliesTools: []string{"reminder_list_active"},
+			Execute:      deleteReminder(service),
 		},
 	}
 }

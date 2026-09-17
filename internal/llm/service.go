@@ -118,7 +118,13 @@ type Tool struct {
 	// ClassifierHint can spell out phrasing, abbreviations, or examples a
 	// classifier needs but that would just be noise in the tool schema.
 	ClassifierHint string
-	Execute        ToolHandler
+	// ImpliesTools names other tools that should also be made available
+	// whenever the classifier selects this tool, even if they didn't clear
+	// the relevance threshold on their own (e.g. reminder_delete implies
+	// reminder_list_active, since deleting by ID often needs a prior list
+	// call). The LLM still decides whether to actually call them.
+	ImpliesTools []string
+	Execute      ToolHandler
 }
 
 type GuildInstructionProvider interface {
