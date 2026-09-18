@@ -1,0 +1,140 @@
+{
+ "data": {
+  "Page": {
+   "media": [
+    {
+     "id": 5114,
+     "title": {
+      "romaji": "Hagane no Renkinjutsushi: FULLMETAL ALCHEMIST",
+      "english": "Fullmetal Alchemist: Brotherhood",
+      "native": "\u92fc\u306e\u932c\u91d1\u8853\u5e2b FULLMETAL ALCHEMIST"
+     },
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 64,
+     "duration": 25,
+     "season": "SPRING",
+     "seasonYear": 2009,
+     "startDate": {
+      "year": 2009,
+      "month": 4,
+      "day": 5
+     },
+     "endDate": {
+      "year": 2010,
+      "month": 7,
+      "day": 4
+     },
+     "genres": [
+      "Action",
+      "Adventure",
+      "Drama",
+      "Fantasy"
+     ],
+     "averageScore": 90,
+     "description": "\"In order for something to be obtained, something of equal value must be lost.\"\n<br><br>\nAlchemy is bound by this Law of Equivalent Exchange\u2014something the young brothers Edward and Alphonse Elric only realize after attempting human transmutation: the one forbidden act of alchemy. They pay a terrible price for their transgression\u2014Edward loses his left leg, Alphonse his physical body. It is only by the desperate sacrifice of Edward's right arm that he is able to affix Alphonse's soul to a suit of armor. Devastated and alone, it is the hope that they would both eventually return to their original bodies that gives Edward the inspiration to obtain metal limbs called \"automail\" and become a state alchemist, the Fullmetal Alchemist.\n<br><br>\nThree years of searching later, the brothers seek the Philosopher's Stone, a mythical relic that allows an alchemist to overcome the Law of Equivalent Exchange. Even with military allies Colonel Roy Mustang, Lieutenant Riza Hawkeye, and Lieutenant Colonel Maes Hughes on their side, the brothers find themselves caught up in a nationwide conspiracy that leads them not only to the true nature of the elusive Philosopher's Stone, but their country's murky history as well. In between finding a serial killer and racing against time, Edward and Alphonse must ask themselves if what they are doing will make them human again... or take away their humanity.\n<br><br>\n(Source: MAL Rewrite)",
+     "siteUrl": "https://anilist.co/anime/5114",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx5114-nSWCgQlmOMtj.jpg",
+      "color": "#e4c993"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "bones"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 6421,
+     "title": {
+      "romaji": "Hagane no Renkinjutsushi: FULLMETAL ALCHEMIST Mihousou Episode",
+      "english": "Fullmetal Alchemist: Brotherhood OVA Collection",
+      "native": "\u92fc\u306e\u932c\u91d1\u8853\u5e2b FULLMETAL ALCHEMIST \u672a\u653e\u9001\u30a8\u30d4\u30bd\u30fc\u30c9"
+     },
+     "format": "OVA",
+     "status": "FINISHED",
+     "episodes": 4,
+     "duration": 15,
+     "season": "SUMMER",
+     "seasonYear": 2009,
+     "startDate": {
+      "year": 2009,
+      "month": 8,
+      "day": 26
+     },
+     "endDate": {
+      "year": 2010,
+      "month": 8,
+      "day": 25
+     },
+     "genres": [
+      "Adventure",
+      "Drama",
+      "Fantasy"
+     ],
+     "averageScore": 77,
+     "description": "Amazing secrets and startling facts are exposed for the first time in the Fullmetal Alchemist: Brotherhood OVA Collection, a new assortment of stories set in never-before-seen corners of the FMA universe. Join Ed and Al as they chase rumors of successful human transmutation into a web of shocking family drama and lies. Sneak a glance at hidden sides of Winry and Hawkeye's personalities. Survive the frigid north with a young Izumi Curtis as she fights to gain a deeper understanding of alchemy. Explore the legendary friendship shared by Mustang and Hughes and watch them grow from military school rivals into hardened brothers transformed by the horrors of the Ishvalan War. You thought you knew the whole story. You thought all the tales were told. The Fullmetal Alchemist: Brotherhood OVA Collection offers proof: You were wrong.<br>\n<br>\n(Source: FUNimation)<br>\n<br>\n<b>1. The Blind Alchemist (\u76f2\u76ee\u306e\u932c\u91d1\u8853\u5e2b, Moumoku no Renkinjutsushi)</b><br>\nBased on a side story of the Fullmetal Alchemist manga published in the Fullmetal Alchemist Perfect Guidebook (2003). It's about a blind alchemist named Jude, who serves the Humbergang family. He once violated the taboo of Alchemy.<br>\n<br>\n<b>2. Simple People (\u30b7\u30f3\u30d7\u30eb\u306a\u4eba\u3005, Simple na Hitobito)</b><br>\nA story about Riza (why she let her hair grow longer) and Winry (why she had her ears pierced and how she got her earrings).<br>\n<br>\n<b>3. The Tale of Teacher (\u5e2b\u5320\u7269\u8a9e, Sensei Monogatari)</b><br>\nBased on a side story of the Fullmetal Alchemist manga, the third OVA is about Edward and Alphonse's teacher, Izumi Curtis. The story is compiled of two parts. The first part shows how Izumi survived in Mt. Briggs to become an apprentice of a renowned alchemist. The second part shows how Izumi and Sig met and their love at first sight.<br>\n<br>\n<b>4. Yet Another Man's Battlefield (\u305d\u308c\u3082\u307e\u305f\u5f7c\u306e\u6226\u5834, Sore mo mata Kare no Senjou)</b><br>\nThe story centres around Roy, aged 18, in a military boot camp, how he met an Ishbalan recruit named Heathcliffe Arbor, how he became a friendly rival to Hughes.",
+     "siteUrl": "https://anilist.co/anime/6421",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/6421.jpg",
+      "color": "#bbf1ff"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "bones"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 7902,
+     "title": {
+      "romaji": "Hagane no Renkinjutsushi: FULLMETAL ALCHEMIST - Arakawa Hiromu Kaki Oroshi 4-koma Gekijou",
+      "english": "Fullmetal Alchemist: Brotherhood: 4-Koma Theater",
+      "native": "\u92fc\u306e\u932c\u91d1\u8853\u5e2b FULLMETAL ALCHEMIST \u8352\u5ddd\u5f18 \u63cf\u304d\u4e0b\u308d\u30574\u30b3\u30de\u5287\u5834"
+     },
+     "format": "SPECIAL",
+     "status": "FINISHED",
+     "episodes": 16,
+     "duration": 2,
+     "season": "SUMMER",
+     "seasonYear": 2009,
+     "startDate": {
+      "year": 2009,
+      "month": 8,
+      "day": 26
+     },
+     "endDate": {
+      "year": 2010,
+      "month": 11,
+      "day": 24
+     },
+     "genres": [
+      "Comedy",
+      "Fantasy"
+     ],
+     "averageScore": 70,
+     "description": "Short specials from the DVDs/BDs.",
+     "siteUrl": "https://anilist.co/anime/7902",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/7902.jpg",
+      "color": "#e4c9a1"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "bones"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    }
+   ]
+  }
+ }
+}

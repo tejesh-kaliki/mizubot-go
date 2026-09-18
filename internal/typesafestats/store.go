@@ -17,6 +17,13 @@ const (
 	StatusError   = "error"
 )
 
+// Kinds of judgement logged in this table.
+const (
+	KindClassifier  = "classifier"   // tool routing and guild flag classification
+	KindAniListPick = "anilist_pick" // choosing among AniList search candidates
+	KindEmbedFilter = "embed_filter" // deciding whether a tool's embed is attached
+)
+
 type ClassificationLog struct {
 	ID               int64
 	GuildID          string
@@ -29,6 +36,7 @@ type ClassificationLog struct {
 	ResponseAnswers  string
 	SelectedTools    string
 	MatchedFlags     string
+	Kind             string
 	InputTokens      int64
 	OutputTokens     int64
 	Latency          time.Duration
@@ -48,11 +56,13 @@ type CreateClassificationLogParams struct {
 	ResponseAnswers  string
 	SelectedTools    string
 	MatchedFlags     string
-	InputTokens      int64
-	OutputTokens     int64
-	Latency          time.Duration
-	Status           string
-	Error            string
+	// Kind says which judgement this row logs; empty means KindClassifier.
+	Kind         string
+	InputTokens  int64
+	OutputTokens int64
+	Latency      time.Duration
+	Status       string
+	Error        string
 }
 
 type Store struct {
@@ -70,6 +80,11 @@ func (s *Store) Create(ctx context.Context, params CreateClassificationLogParams
 		status = StatusSuccess
 	}
 
+	kind := strings.TrimSpace(params.Kind)
+	if kind == "" {
+		kind = KindClassifier
+	}
+
 	row, err := s.q.CreateTypeSafeClassificationLog(ctx, s.db, data.CreateTypeSafeClassificationLogParams{
 		GuildID:          nullableString(params.GuildID),
 		ChannelID:        strings.TrimSpace(params.ChannelID),
@@ -81,6 +96,7 @@ func (s *Store) Create(ctx context.Context, params CreateClassificationLogParams
 		ResponseAnswers:  params.ResponseAnswers,
 		SelectedTools:    params.SelectedTools,
 		MatchedFlags:     params.MatchedFlags,
+		Kind:             kind,
 		InputTokens:      params.InputTokens,
 		OutputTokens:     params.OutputTokens,
 		LatencyMs:        params.Latency.Milliseconds(),
@@ -134,6 +150,7 @@ func convertClassificationLog(row data.TypesafeClassificationLog) Classification
 		ResponseAnswers:  row.ResponseAnswers,
 		SelectedTools:    row.SelectedTools,
 		MatchedFlags:     row.MatchedFlags,
+		Kind:             row.Kind,
 		InputTokens:      row.InputTokens,
 		OutputTokens:     row.OutputTokens,
 		Latency:          time.Duration(row.LatencyMs) * time.Millisecond,

@@ -26,10 +26,11 @@ INSERT INTO typesafe_classification_logs(
     error,
     created_at,
     message_id,
-    matched_flags
+    matched_flags,
+    kind
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id, matched_flags
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id, matched_flags, kind
 `
 
 type CreateTypeSafeClassificationLogParams struct {
@@ -49,6 +50,7 @@ type CreateTypeSafeClassificationLogParams struct {
 	CreatedAt        int64   `json:"created_at"`
 	MessageID        string  `json:"message_id"`
 	MatchedFlags     string  `json:"matched_flags"`
+	Kind             string  `json:"kind"`
 }
 
 func (q *Queries) CreateTypeSafeClassificationLog(ctx context.Context, db DBTX, arg CreateTypeSafeClassificationLogParams) (TypesafeClassificationLog, error) {
@@ -69,6 +71,7 @@ func (q *Queries) CreateTypeSafeClassificationLog(ctx context.Context, db DBTX, 
 		arg.CreatedAt,
 		arg.MessageID,
 		arg.MatchedFlags,
+		arg.Kind,
 	)
 	var i TypesafeClassificationLog
 	err := row.Scan(
@@ -89,12 +92,13 @@ func (q *Queries) CreateTypeSafeClassificationLog(ctx context.Context, db DBTX, 
 		&i.CreatedAt,
 		&i.MessageID,
 		&i.MatchedFlags,
+		&i.Kind,
 	)
 	return i, err
 }
 
 const listTypeSafeClassificationLogsByGuild = `-- name: ListTypeSafeClassificationLogsByGuild :many
-SELECT id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id, matched_flags
+SELECT id, guild_id, channel_id, user_id, model, request_state, request_questions, response_answers, selected_tools, input_tokens, output_tokens, latency_ms, status, error, created_at, message_id, matched_flags, kind
 FROM typesafe_classification_logs
 WHERE guild_id = ?
 ORDER BY created_at DESC
@@ -128,6 +132,7 @@ func (q *Queries) ListTypeSafeClassificationLogsByGuild(ctx context.Context, db 
 			&i.CreatedAt,
 			&i.MessageID,
 			&i.MatchedFlags,
+			&i.Kind,
 		); err != nil {
 			return nil, err
 		}

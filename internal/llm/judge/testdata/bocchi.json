@@ -1,0 +1,184 @@
+{
+ "data": {
+  "Page": {
+   "media": [
+    {
+     "id": 130003,
+     "title": {
+      "romaji": "Bocchi the Rock!",
+      "english": "BOCCHI THE ROCK!",
+      "native": "\u307c\u3063\u3061\u30fb\u3056\u30fb\u308d\u3063\u304f\uff01"
+     },
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 12,
+     "duration": 24,
+     "season": "FALL",
+     "seasonYear": 2022,
+     "startDate": {
+      "year": 2022,
+      "month": 10,
+      "day": 9
+     },
+     "endDate": {
+      "year": 2022,
+      "month": 12,
+      "day": 25
+     },
+     "genres": [
+      "Comedy",
+      "Music",
+      "Slice of Life"
+     ],
+     "averageScore": 87,
+     "description": "Hitori Gotou, \u201cBocchi-chan,\u201d is a girl who\u2019s so introverted and shy around people that she\u2019d always start her conversations with \u201cAh...\u201d<br>\n<br>\nDuring her middle school years, she started playing the guitar, wanting to join a band because she thought it could be an opportunity for even someone shy like her to also shine. But because she had no friends, she ended up practicing guitar for six hours every day all by herself. After becoming a skilled guitar player, she uploaded videos of herself playing the guitar to the internet under the name \u201cGuitar Hero\u201d and fantasized about performing at her school\u2019s cultural festival concert. But not only could she not find any bandmates, before she knew it, she was in high school and still wasn\u2019t able to make a single friend!<br>\n<br>\nShe was really close to becoming a shut-in, but one day, Nijika Ijichi, the drummer in Kessoku Band, reached out to her. And because of that, her everyday life started to change little by little...<br>\n<br>\n(Source: Crunchyroll)",
+     "siteUrl": "https://anilist.co/anime/130003",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx130003-HTDmeL4RGeJ4.png",
+      "color": "#e4bb50"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "CloverWorks"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 165253,
+     "title": {
+      "romaji": "Bocchi the Rock! Re:",
+      "english": "BOCCHI THE ROCK! Recap Part 1",
+      "native": "\u307c\u3063\u3061\u30fb\u3056\u30fb\u308d\u3063\u304f\uff01Re:"
+     },
+     "format": "MOVIE",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 92,
+     "season": "SPRING",
+     "seasonYear": 2024,
+     "startDate": {
+      "year": 2024,
+      "month": 6,
+      "day": 7
+     },
+     "endDate": {
+      "year": 2024,
+      "month": 6,
+      "day": 7
+     },
+     "genres": [
+      "Comedy",
+      "Music",
+      "Slice of Life"
+     ],
+     "averageScore": 83,
+     "description": "Compilation film of <i>Bocchi the Rock!</i> featuring new animation intro footage. The first of the Bocchi compilation movie duology.",
+     "siteUrl": "https://anilist.co/anime/165253",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx165253-nAwyrMZm4jBA.jpg",
+      "color": "#e4c9ae"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "CloverWorks"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 186712,
+     "title": {
+      "romaji": "Bocchi the Rock! 2nd Season",
+      "english": null,
+      "native": "\u307c\u3063\u3061\u30fb\u3056\u30fb\u308d\u3063\u304f\uff01 2\u671f"
+     },
+     "format": "TV",
+     "status": "NOT_YET_RELEASED",
+     "episodes": null,
+     "duration": null,
+     "season": null,
+     "seasonYear": null,
+     "startDate": {
+      "year": null,
+      "month": null,
+      "day": null
+     },
+     "endDate": {
+      "year": null,
+      "month": null,
+      "day": null
+     },
+     "genres": [
+      "Comedy",
+      "Music",
+      "Slice of Life"
+     ],
+     "averageScore": null,
+     "description": "<i>We will Be back\uff01</i><br><br>\n\nThe second season of <i>Bocchi the Rock!</i><br><br>\n\n(Source: Official BTR Twitter)",
+     "siteUrl": "https://anilist.co/anime/186712",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx186712-d5I2TjUQcHuI.jpg",
+      "color": "#f1d65d"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "CloverWorks"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 171099,
+     "title": {
+      "romaji": "Bocchi the Rock! Re:Re:",
+      "english": "BOCCHI THE ROCK! Recap Part 2",
+      "native": "\u307c\u3063\u3061\u30fb\u3056\u30fb\u308d\u3063\u304f\uff01 Re:Re:"
+     },
+     "format": "MOVIE",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 77,
+     "season": "SUMMER",
+     "seasonYear": 2024,
+     "startDate": {
+      "year": 2024,
+      "month": 8,
+      "day": 9
+     },
+     "endDate": {
+      "year": 2024,
+      "month": 8,
+      "day": 9
+     },
+     "genres": [
+      "Comedy",
+      "Music",
+      "Slice of Life"
+     ],
+     "averageScore": 83,
+     "description": "Compilation film of <i>Bocchi the Rock!</i> featuring new animation intro footage and additional scenes. The second of the Bocchi compilation movie duology.",
+     "siteUrl": "https://anilist.co/anime/171099",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx171099-JexoHylkSZ6r.jpg",
+      "color": null
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "CloverWorks"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    }
+   ]
+  }
+ }
+}

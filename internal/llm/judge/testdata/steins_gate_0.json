@@ -1,0 +1,141 @@
+{
+ "data": {
+  "Page": {
+   "media": [
+    {
+     "id": 21127,
+     "title": {
+      "romaji": "Steins;Gate 0",
+      "english": "Steins;Gate 0",
+      "native": "\u30b7\u30e5\u30bf\u30a4\u30f3\u30ba\u30fb\u30b2\u30fc\u30c8 \u30bc\u30ed"
+     },
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 23,
+     "duration": 24,
+     "season": "SPRING",
+     "seasonYear": 2018,
+     "startDate": {
+      "year": 2018,
+      "month": 4,
+      "day": 12
+     },
+     "endDate": {
+      "year": 2018,
+      "month": 9,
+      "day": 27
+     },
+     "genres": [
+      "Drama",
+      "Psychological",
+      "Sci-Fi",
+      "Thriller"
+     ],
+     "averageScore": 84,
+     "description": "The eccentric, self-proclaimed mad scientist Rintarou Okabe has become a shell of his former self. Depressed and traumatized after failing to rescue his friend, he has decided to forsake his mad scientist alter ego and live as an ordinary college student. Surrounded by friends who know little of his time travel experiences, Okabe spends his days trying to forget the horrors of his adventures alone.<br>\n<br>\nWhile working as a receptionist at a college technology forum, Okabe meets the short, spunky Maho Hiyajo, who\nlater turns out to be the interpreter at the forum's presentation, conducted by Professor Alexis Leskinen. In front of a stunned crowd, Alexis and Maho unveil Amadeus\u2014a revolutionary AI capable of storing a person's memories and creating a perfect simulation of that person complete with their personality and quirks. Meeting with Maho and Alexis after the presentation, Okabe learns that the two were Kurisu's colleagues in university, and that they have simulated her in Amadeus. Hired by Alexis to research the simulation's behavior, Okabe is given the chance to interact with the shadow of a long-lost dear friend. Dangerously tangled in the past, Okabe must face the harsh reality and carefully maneuver around the disastrous consequences that come with disturbing the natural flow of time.\n",
+     "siteUrl": "https://anilist.co/anime/21127",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21127-7ARWZkDXKiiD.jpg",
+      "color": "#f1d6bb"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "WHITE FOX"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 104174,
+     "title": {
+      "romaji": "Steins;Gate 0: Kesshou Takei no Valentine - Bittersweet Day",
+      "english": "Steins;Gate 0: Valentine's of Crystal Polymorphism -Bittersweet Intermedio-",
+      "native": "\u30b7\u30e5\u30bf\u30a4\u30f3\u30ba\u30fb\u30b2\u30fc\u30c8 \u30bc\u30ed \u7d50\u6676\u591a\u5f62\u306e\u30d0\u30ec\u30f3\u30bf\u30a4\u30f3"
+     },
+     "format": "OVA",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 24,
+     "season": "WINTER",
+     "seasonYear": 2019,
+     "startDate": {
+      "year": 2018,
+      "month": 12,
+      "day": 21
+     },
+     "endDate": {
+      "year": 2018,
+      "month": 12,
+      "day": 21
+     },
+     "genres": [
+      "Comedy",
+      "Sci-Fi"
+     ],
+     "averageScore": 72,
+     "description": "Unaired episode included with the volume 6 BD/DVD release of Steins;Gate 0. A special day approaches during a lull in the chaos. It's that time of year to give chocolate to the ones you love, but not everyone finds that an easy task.<br>\n<br>\nWith Valentine's Day just around the corner, the girls of the Future Gadget Lab discover that Kagari has never celebrated the occasion before! Determined to make this year's holiday the best one yet, they all set out to make delicious homemade chocolates together.<br>\n<br>\nHowever, with many of their quirks causing kitchen disasters, this may prove to be too hard a task. Will their feelings ever reach those of their heart's desire?\n",
+     "siteUrl": "https://anilist.co/anime/104174",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx104174-aoNLSSN6bT4L.png",
+      "color": null
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "WHITE FOX"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 21624,
+     "title": {
+      "romaji": "Steins;Gate: Kyoukaimenjou no Missing Link - Divide By Zero",
+      "english": "Steins;Gate 0: 23\u03b2 -Divide by Zero-",
+      "native": "\u30b7\u30e5\u30bf\u30a4\u30f3\u30ba\u30fb\u30b2\u30fc\u30c8 \u5883\u754c\u9762\u4e0a\u306e\u30df\u30c3\u30b7\u30f3\u30b0\u30ea\u30f3\u30af -Divide By Zero-"
+     },
+     "format": "OVA",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 24,
+     "season": "FALL",
+     "seasonYear": 2015,
+     "startDate": {
+      "year": 2015,
+      "month": 12,
+      "day": 3
+     },
+     "endDate": {
+      "year": 2015,
+      "month": 12,
+      "day": 3
+     },
+     "genres": [
+      "Drama",
+      "Psychological",
+      "Sci-Fi",
+      "Thriller"
+     ],
+     "averageScore": 81,
+     "description": "Alternate 23rd episode of Steins;Gate, which leads into the story of Steins;Gate 0. Included with the Steins;Gate Complete Blu-ray Box.<br>\n<br>\nThe main difference between this episode and the original episode 23 is that Okabe does not receive the Movie Mail from his future self, due to Mayuri begging Suzuha to stop relying on Okabe to prevent World War Three. By not opening the Movie Mail Okabe does not find out about Operation Skuld and is unsuccessful in averting both Kurisu's death and World War Three, thereby leading into the story of Steins;Gate 0<br>",
+     "siteUrl": "https://anilist.co/anime/21624",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21624-szbmwyC3sJos.jpg",
+      "color": "#f1d6c9"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "WHITE FOX"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    }
+   ]
+  }
+ }
+}

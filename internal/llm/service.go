@@ -99,10 +99,39 @@ type ToolContext struct {
 	Username  string
 	ChannelID string
 	GuildID   string
+	// MessageID and Message identify the user message being answered, for
+	// tools that need it as context for their own judgments or logging.
+	MessageID string
+	Message   string
+}
+
+// EmbedField is one name/value pair in an Embed.
+type EmbedField struct {
+	Name   string
+	Value  string
+	Inline bool
+}
+
+// Embed is a rich card a tool wants shown alongside the reply. It is
+// deliberately Discord-agnostic; the bot converts it when sending.
+type Embed struct {
+	Title        string
+	URL          string
+	Description  string
+	Color        int
+	ThumbnailURL string
+	Fields       []EmbedField
+	Footer       string
+	// Intent is a short plain-language label of what this embed is (e.g.
+	// "anime info card"), used to word the EmbedFilter's question.
+	Intent string
 }
 
 type ToolResult struct {
 	Content string
+	// Embeds are attached to the final reply. The EmbedFilter, when set,
+	// may drop them after the reply is written.
+	Embeds []Embed
 }
 
 type ToolHandler func(ctx context.Context, toolCtx ToolContext, args json.RawMessage) (ToolResult, error)
@@ -156,15 +185,24 @@ type ToolClassifier interface {
 	Classify(ctx context.Context, message Message, tools map[string]Tool) (ClassificationResult, error)
 }
 
+// EmbedFilter decides, after the reply is written, which of the embeds
+// tools produced are still worth attaching. It returns the embeds to keep.
+// If it errors, Service keeps every embed.
+type EmbedFilter interface {
+	Filter(ctx context.Context, message Message, reply string, embeds []Embed) ([]Embed, error)
+}
+
 type Service struct {
 	completer                Completer
 	tools                    map[string]Tool
 	guildInstructionProvider GuildInstructionProvider
 	toolClassifier           ToolClassifier
+	embedFilter              EmbedFilter
 }
 
 type Response struct {
 	Content   string
+	Embeds    []Embed
 	Usage     Usage
 	LLMTurns  int64
 	ToolCalls int64
@@ -203,6 +241,15 @@ func (s *Service) SetToolClassifier(classifier ToolClassifier) {
 	s.toolClassifier = classifier
 }
 
+// SetEmbedFilter installs an EmbedFilter run over tool-produced embeds once
+// the reply is written. When nil (the default), all embeds are kept.
+func (s *Service) SetEmbedFilter(filter EmbedFilter) {
+	if s == nil {
+		return
+	}
+	s.embedFilter = filter
+}
+
 func (s *Service) GenerateResponse(ctx context.Context, message Message) (string, error) {
 	response, err := s.GenerateResponseWithMetrics(ctx, message)
 	return response.Content, err
@@ -232,7 +279,17 @@ func (s *Service) GenerateResponseWithMetrics(ctx context.Context, message Messa
 		result.LLMTurns = 1
 		return result, nil
 	}
-	return s.generateWithTools(ctx, message, tools, hints, flags)
+	response, err := s.generateWithTools(ctx, message, tools, hints, flags)
+	if err != nil || len(response.Embeds) == 0 || s.embedFilter == nil {
+		return response, err
+	}
+	kept, filterErr := s.embedFilter.Filter(ctx, message, response.Content, response.Embeds)
+	if filterErr != nil {
+		log.Printf("llm embed filter failed, keeping all embeds: message_id=%s error=%v", message.MessageID, filterErr)
+		return response, nil
+	}
+	response.Embeds = kept
+	return response, nil
 }
 
 type toolDecision struct {
@@ -283,8 +340,11 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 		Username:  message.Username,
 		ChannelID: message.ChannelID,
 		GuildID:   message.GuildID,
+		MessageID: message.MessageID,
+		Message:   message.Content,
 	}
 	results := make([]toolExecutionResult, 0, len(decision.ToolCalls))
+	var embeds []Embed
 	toolCalls := int64(len(decision.ToolCalls))
 	for _, call := range decision.ToolCalls {
 		tool, ok := tools[call.Name]
@@ -299,6 +359,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 			continue
 		}
 		results = append(results, toolExecutionResult{Name: call.Name, Result: result.Content})
+		embeds = append(embeds, result.Embeds...)
 	}
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
@@ -317,6 +378,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 		return Response{}, err
 	}
 	finalResponse.Usage = addUsage(usage, finalResponse.Usage)
+	finalResponse.Embeds = embeds
 	finalResponse.LLMTurns = decisionResponse.LLMTurns + 1
 	finalResponse.ToolCalls = toolCalls
 	return finalResponse, nil
@@ -340,12 +402,15 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	usage := Usage{}
 	var llmTurns int64
 	var toolCalls int64
+	var embeds []Embed
 
 	toolCtx := ToolContext{
 		UserID:    message.UserID,
 		Username:  message.Username,
 		ChannelID: message.ChannelID,
 		GuildID:   message.GuildID,
+		MessageID: message.MessageID,
+		Message:   message.Content,
 	}
 	for range maxToolIterations {
 		response, err := chatCompleter.Chat(ctx, ChatRequest{Messages: messages, Tools: selectedChatTools})
@@ -355,7 +420,7 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 		llmTurns++
 		usage = addUsage(usage, response.Usage)
 		if len(response.ToolCalls) == 0 {
-			return Response{Content: strings.TrimSpace(response.Content), Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
+			return Response{Content: strings.TrimSpace(response.Content), Embeds: embeds, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 		}
 		toolCalls += int64(len(response.ToolCalls))
 
@@ -365,12 +430,13 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 			ToolCalls: response.ToolCalls,
 		})
 		for _, call := range response.ToolCalls {
-			result := executeToolCall(ctx, tools, toolCtx, call)
+			content, callEmbeds := executeToolCall(ctx, tools, toolCtx, call)
+			embeds = append(embeds, callEmbeds...)
 			messages = append(messages, ChatMessage{
 				Role:       "tool",
 				ToolName:   call.Name,
 				ToolCallID: call.ID,
-				Content:    result,
+				Content:    content,
 			})
 		}
 	}
@@ -385,20 +451,20 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	}
 	llmTurns++
 	usage = addUsage(usage, final.Usage)
-	return Response{Content: strings.TrimSpace(final.Content), Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
+	return Response{Content: strings.TrimSpace(final.Content), Embeds: embeds, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 }
 
-func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) string {
+func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) (string, []Embed) {
 	tool, ok := tools[call.Name]
 	if !ok {
-		return "Error: unknown tool"
+		return "Error: unknown tool", nil
 	}
 	log.Printf("llm tool call: name=%s user_id=%s channel_id=%s", call.Name, toolCtx.UserID, toolCtx.ChannelID)
 	result, err := tool.Execute(ctx, toolCtx, call.Arguments)
 	if err != nil {
-		return "Error: " + err.Error()
+		return "Error: " + err.Error(), nil
 	}
-	return result.Content
+	return result.Content, result.Embeds
 }
 
 func completeWithMetrics(ctx context.Context, completer Completer, request CompletionRequest) (Response, error) {

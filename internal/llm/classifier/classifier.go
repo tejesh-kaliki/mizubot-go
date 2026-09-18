@@ -249,6 +249,7 @@ func (c *TypeSafeClassifier) logResult(
 		ResponseAnswers:  string(responseJSON),
 		SelectedTools:    string(selectedJSON),
 		MatchedFlags:     matchedFlagsJSON,
+		Kind:             typesafestats.KindClassifier,
 		InputTokens:      usage.InputTokens,
 		OutputTokens:     usage.OutputTokens,
 		Latency:          latency,

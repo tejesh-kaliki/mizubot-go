@@ -97,6 +97,7 @@ type TypesafeClassificationLog struct {
 	CreatedAt        int64   `json:"created_at"`
 	MessageID        string  `json:"message_id"`
 	MatchedFlags     string  `json:"matched_flags"`
+	Kind             string  `json:"kind"`
 }
 
 type UserAnimeEntry struct {

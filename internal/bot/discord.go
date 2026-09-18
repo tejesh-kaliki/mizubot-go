@@ -265,6 +265,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	}
 
 	response := "Hello"
+	var embeds []*discordgo.MessageEmbed
 	if b.llm != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		stopTyping := b.startTyping(ctx, s, m.ChannelID)
@@ -291,8 +292,9 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			log.Printf("llm response generation failed: channel_id=%s user_id=%s message_id=%s error=%v", m.ChannelID, m.Author.ID, m.ID, err)
 			response = "I couldn't generate a response right now."
 			b.logLLMMessage(ctx, m, llm.Response{}, latency, llmstats.StatusError, err.Error())
-		} else if generated.Content != "" {
+		} else if generated.Content != "" || len(generated.Embeds) > 0 {
 			response = generated.Content
+			embeds = discordEmbeds(generated.Embeds)
 			b.logLLMMessage(ctx, m, generated, latency, llmstats.StatusSuccess, "")
 		} else {
 			log.Printf("llm returned empty response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
@@ -304,10 +306,19 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		log.Printf("llm service not configured; using fallback response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
 	}
 	responses := splitDiscordMessages(response)
+	if len(responses) == 0 && len(embeds) > 0 {
+		// Embed-only reply: no text to split, but there is still a message to send.
+		responses = []string{""}
+	}
 	for idx, part := range responses {
 		var err error
 		if idx == 0 {
-			_, err = s.ChannelMessageSendReply(m.ChannelID, part, m.Reference())
+			// Embeds ride on the first message so they sit right under the reply's opening.
+			_, err = s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
+				Content:   part,
+				Embeds:    embeds,
+				Reference: m.Reference(),
+			})
 		} else {
 			_, err = s.ChannelMessageSend(m.ChannelID, part)
 		}
@@ -545,4 +556,53 @@ func lastBreakIndex(content, sep string) int {
 		return -1
 	}
 	return len([]rune(content[:byteIdx+len(sep)]))
+}
+
+// maxDiscordEmbeds is Discord's per-message embed limit.
+const maxDiscordEmbeds = 10
+
+// discordEmbeds converts Discord-agnostic tool embeds into discordgo embeds,
+// clamping to Discord's size limits.
+func discordEmbeds(embeds []llm.Embed) []*discordgo.MessageEmbed {
+	if len(embeds) == 0 {
+		return nil
+	}
+	if len(embeds) > maxDiscordEmbeds {
+		embeds = embeds[:maxDiscordEmbeds]
+	}
+	out := make([]*discordgo.MessageEmbed, 0, len(embeds))
+	for _, e := range embeds {
+		embed := &discordgo.MessageEmbed{
+			Title:       clampRunes(e.Title, 256),
+			URL:         e.URL,
+			Description: clampRunes(e.Description, 4096),
+			Color:       e.Color,
+		}
+		if e.ThumbnailURL != "" {
+			embed.Thumbnail = &discordgo.MessageEmbedThumbnail{URL: e.ThumbnailURL}
+		}
+		if e.Footer != "" {
+			embed.Footer = &discordgo.MessageEmbedFooter{Text: clampRunes(e.Footer, 2048)}
+		}
+		for i, f := range e.Fields {
+			if i == 25 {
+				break
+			}
+			embed.Fields = append(embed.Fields, &discordgo.MessageEmbedField{
+				Name:   clampRunes(f.Name, 256),
+				Value:  clampRunes(f.Value, 1024),
+				Inline: f.Inline,
+			})
+		}
+		out = append(out, embed)
+	}
+	return out
+}
+
+func clampRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max-1]) + "…"
 }

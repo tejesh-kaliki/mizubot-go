@@ -1,0 +1,234 @@
+{
+ "data": {
+  "Page": {
+   "media": [
+    {
+     "id": 110277,
+     "title": {
+      "romaji": "Shingeki no Kyojin: The Final Season",
+      "english": "Attack on Titan Final Season",
+      "native": "\u9032\u6483\u306e\u5de8\u4eba The Final Season"
+     },
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 16,
+     "duration": 24,
+     "season": "WINTER",
+     "seasonYear": 2021,
+     "startDate": {
+      "year": 2020,
+      "month": 12,
+      "day": 7
+     },
+     "endDate": {
+      "year": 2021,
+      "month": 3,
+      "day": 29
+     },
+     "genres": [
+      "Action",
+      "Drama",
+      "Fantasy",
+      "Mystery"
+     ],
+     "averageScore": 87,
+     "description": "It\u2019s been four years since the Scout Regiment reached the shoreline, and the world looks different now. Things are heating up as the fate of the Scout Regiment\u2014and the people of Paradis\u2014are determined at last. However, Eren is missing. Will he reappear before age-old tensions between Marleyans and Eldians result in the war of all wars?<br>\n<br>\n(Source: Crunchyroll)",
+     "siteUrl": "https://anilist.co/anime/110277",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx110277-sKUNXAsWMNFw.jpg",
+      "color": "#ae6b35"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "MAPPA"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 131681,
+     "title": {
+      "romaji": "Shingeki no Kyojin: The Final Season Part 2",
+      "english": "Attack on Titan Final Season Part 2",
+      "native": "\u9032\u6483\u306e\u5de8\u4eba The Final Season Part 2"
+     },
+     "format": "TV",
+     "status": "FINISHED",
+     "episodes": 12,
+     "duration": 24,
+     "season": "WINTER",
+     "seasonYear": 2022,
+     "startDate": {
+      "year": 2022,
+      "month": 1,
+      "day": 10
+     },
+     "endDate": {
+      "year": 2022,
+      "month": 4,
+      "day": 4
+     },
+     "genres": [
+      "Action",
+      "Drama",
+      "Fantasy",
+      "Mystery",
+      "Psychological"
+     ],
+     "averageScore": 86,
+     "description": "The war for Paradis zeroes in on Shiganshina just as Jaegerists have seized control. After taking a huge blow from a surprise attack led by Eren, Marley swiftly acts to return the favor. With Zeke\u2019s true plan revealed and a military forced under new rule, this battle might be fought on two fronts. Does Eren intend on fulfilling his half-brother\u2019s wishes or does he have a plan of his own?<br>\n<br>\n(Source: Funimation)",
+     "siteUrl": "https://anilist.co/anime/131681",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx131681-5ooUqvqNtee1.jpg",
+      "color": "#35a1e4"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "MAPPA"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 162314,
+     "title": {
+      "romaji": "Shingeki no Kyojin: The Final Season - Kanketsu-hen Kouhen",
+      "english": "Attack on Titan Final Season THE FINAL CHAPTERS Special 2",
+      "native": "\u9032\u6483\u306e\u5de8\u4eba The Final Season\u5b8c\u7d50\u7de8 \u5f8c\u7de8"
+     },
+     "format": "SPECIAL",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 85,
+     "season": "FALL",
+     "seasonYear": 2023,
+     "startDate": {
+      "year": 2023,
+      "month": 11,
+      "day": 5
+     },
+     "endDate": {
+      "year": 2023,
+      "month": 11,
+      "day": 5
+     },
+     "genres": [
+      "Action",
+      "Drama",
+      "Fantasy",
+      "Psychological",
+      "Romance"
+     ],
+     "averageScore": 87,
+     "description": "Eren, as the Founding Titan, advances on Fort Salta with countless other Titans. Appearing before the refugees, who stand on the brink of despair, are Mikasa, Armin, Jean, Conny, Reiner, Pieck, and Levi, who narrowly escaped from the rumbling. The battle between former comrades and childhood friends with Eren concludes here.\n<br><br>\n(Source: Crunchyroll)",
+     "siteUrl": "https://anilist.co/anime/162314",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx162314-qIWdAAFtvY8J.jpg",
+      "color": "#5daee4"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "MAPPA"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 146984,
+     "title": {
+      "romaji": "Shingeki no Kyojin: The Final Season - Kanketsu-hen Zenpen",
+      "english": "Attack on Titan Final Season THE FINAL CHAPTERS Special 1",
+      "native": "\u9032\u6483\u306e\u5de8\u4eba The Final Season\u5b8c\u7d50\u7de8 \u524d\u7de8"
+     },
+     "format": "SPECIAL",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 61,
+     "season": "WINTER",
+     "seasonYear": 2023,
+     "startDate": {
+      "year": 2023,
+      "month": 3,
+      "day": 4
+     },
+     "endDate": {
+      "year": 2023,
+      "month": 3,
+      "day": 4
+     },
+     "genres": [
+      "Action",
+      "Drama",
+      "Fantasy",
+      "Mystery",
+      "Psychological"
+     ],
+     "averageScore": 87,
+     "description": "The fate of the world hangs in the balance as Eren unleashes the ultimate power of the Titans. With a burning determination to eliminate all who threaten Eldia, he leads an unstoppable army of Colossal Titans towards Marley. Now a motley crew of his former comrades and enemies scramble to halt his deadly mission, the only question is, can they stop him?<br>\n<br>\n(Source: Crunchyroll)",
+     "siteUrl": "https://anilist.co/anime/146984",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx146984-GXrLeT6vQqyP.jpg",
+      "color": "#f1a128"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "MAPPA"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 139754,
+     "title": {
+      "romaji": "Shingeki no Kyojin: Chimi Kyara Gekijou - Final",
+      "english": "Attack On Titan: The Final Season Specials",
+      "native": "\u300c\u9032\u6483\u306e\u5de8\u4eba\u300d\u3061\u307f\u30ad\u30e3\u30e9\u5287\u5834 \"\u30d5\u30a1\u30a4\u30ca\u30eb\""
+     },
+     "format": "SPECIAL",
+     "status": "FINISHED",
+     "episodes": 2,
+     "duration": 5,
+     "season": "SUMMER",
+     "seasonYear": 2021,
+     "startDate": {
+      "year": 2021,
+      "month": 7,
+      "day": 7
+     },
+     "endDate": {
+      "year": 2021,
+      "month": 8,
+      "day": 4
+     },
+     "genres": [
+      "Comedy",
+      "Fantasy"
+     ],
+     "averageScore": 78,
+     "description": "<i>Shingeki no Kyojin: The Final Season</i> DVD/BD specials. They are chibi parody shorts; 2 video was included on the DVD/BDs. Each video contained 8 stories (essentially chibi parody short episode 60\u201375) which continued the chibi parody story from the previous chibi parody specials included on the DVD/BDs of the previous seasons.\n\n",
+     "siteUrl": "https://anilist.co/anime/139754",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx139754-tws6cBmwEWPF.jpg",
+      "color": null
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "MAPPA"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    }
+   ]
+  }
+ }
+}

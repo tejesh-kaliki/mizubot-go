@@ -1,0 +1,86 @@
+[
+ {
+  "name": "aot_final_season",
+  "user_message": "when did the attack on titan final season come out?",
+  "query": "Attack on Titan Final Season",
+  "fixture": "aot_final",
+  "expected_id": 110277
+ },
+ {
+  "name": "aot_final_part2",
+  "user_message": "how many episodes is the final season part 2 of aot?",
+  "query": "Attack on Titan Final Season Part 2",
+  "fixture": "aot_final",
+  "expected_id": 131681
+ },
+ {
+  "name": "fmab_abbrev",
+  "user_message": "is fmab finished?",
+  "query": "Fullmetal Alchemist Brotherhood",
+  "fixture": "fmab",
+  "expected_id": 5114
+ },
+ {
+  "name": "frieren_season2",
+  "user_message": "when does frieren season 2 air?",
+  "query": "Frieren season 2",
+  "fixture": "frieren_s2",
+  "expected_id": 182255
+ },
+ {
+  "name": "steins_gate_zero",
+  "user_message": "tell me about steins;gate 0",
+  "query": "Steins;Gate 0",
+  "fixture": "steins_gate_0",
+  "expected_id": 21127
+ },
+ {
+  "name": "rezero_season2",
+  "user_message": "when did re:zero season 2 start?",
+  "query": "Re:Zero season 2",
+  "fixture": "rezero_s2",
+  "expected_id": 108632
+ },
+ {
+  "name": "rezero_season2_part2",
+  "user_message": "how many episodes is re:zero season 2 part 2",
+  "query": "Re:Zero season 2",
+  "fixture": "rezero_s2",
+  "expected_id": 119661
+ },
+ {
+  "name": "death_note_main",
+  "user_message": "what's death note about?",
+  "query": "Death Note",
+  "fixture": "death_note",
+  "expected_id": 1535
+ },
+ {
+  "name": "one_piece_main",
+  "user_message": "is one piece still airing?",
+  "query": "One Piece",
+  "fixture": "one_piece",
+  "expected_id": 21
+ },
+ {
+  "name": "naruto_shippuden_series",
+  "user_message": "how many episodes does naruto shippuden have?",
+  "query": "Naruto Shippuden",
+  "fixture": "naruto_shippuden",
+  "expected_id": 1735
+ },
+ {
+  "name": "bocchi_season2",
+  "user_message": "is there a second season of bocchi the rock?",
+  "query": "Bocchi the Rock",
+  "fixture": "bocchi",
+  "expected_id": 186712
+ },
+ {
+  "name": "bocchi_recap_movie",
+  "user_message": "how long is the bocchi the rock recap movie",
+  "query": "Bocchi the Rock",
+  "fixture": "bocchi",
+  "expected_id": 165253
+ }
+]

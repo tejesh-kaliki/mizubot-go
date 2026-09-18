@@ -1,0 +1,229 @@
+{
+ "data": {
+  "Page": {
+   "media": [
+    {
+     "id": 21,
+     "title": {
+      "romaji": "ONE PIECE",
+      "english": "ONE PIECE",
+      "native": "ONE PIECE"
+     },
+     "format": "TV",
+     "status": "RELEASING",
+     "episodes": null,
+     "duration": 24,
+     "season": "FALL",
+     "seasonYear": 1999,
+     "startDate": {
+      "year": 1999,
+      "month": 10,
+      "day": 20
+     },
+     "endDate": {
+      "year": null,
+      "month": null,
+      "day": null
+     },
+     "genres": [
+      "Action",
+      "Adventure",
+      "Comedy",
+      "Drama",
+      "Fantasy"
+     ],
+     "averageScore": 87,
+     "description": "Gold Roger was known as the Pirate King, the strongest and most infamous being to have sailed the Grand Line. The capture and death of Roger by the World Government brought a change throughout the world. His last words before his death revealed the location of the greatest treasure in the world, One Piece. It was this revelation that brought about the Grand Age of Pirates, men who dreamed of finding One Piece (which promises an unlimited amount of riches and fame), and quite possibly the most coveted of titles for the person who found it, the title of the Pirate King.<br><br>\nEnter Monkey D. Luffy, a 17-year-old boy that defies your standard definition of a pirate. Rather than the popular persona of a wicked, hardened, toothless pirate who ransacks villages for fun, Luffy\u2019s reason for being a pirate is one of pure wonder; the thought of an exciting adventure and meeting new and intriguing people, along with finding One Piece, are his reasons of becoming a pirate. Following in the footsteps of his childhood hero, Luffy and his crew travel across the Grand Line, experiencing crazy adventures, unveiling dark mysteries and battling strong enemies, all in order to reach One Piece.<br><br>\n<b>*This includes the following special episodes:</b><br>\n- Chopperman to the Rescue! Protect the TV Station by the Shore! (Episode 336)<br>\n- The Strongest Tag-Team! Luffy and Toriko's Hard Struggle! (Episode 492)<br>\n- Team Formation! Save Chopper (Episode 542)<br>\n- History's Strongest Collaboration vs. Glutton of the Sea (Episode 590)<br>\n- 20th Anniversary! Special Romance Dawn (Episode 907)",
+     "siteUrl": "https://anilist.co/anime/21",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx21-ELSYx3yMPcKM.jpg",
+      "color": "#e49335"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "Toei Animation"
+       }
+      ]
+     },
+     "nextAiringEpisode": {
+      "episode": 1179,
+      "airingAt": 1789913760
+     }
+    },
+    {
+     "id": 171630,
+     "title": {
+      "romaji": "THE ONE PIECE",
+      "english": "THE ONE PIECE",
+      "native": "THE ONE PIECE"
+     },
+     "format": null,
+     "status": "NOT_YET_RELEASED",
+     "episodes": 7,
+     "duration": 43,
+     "season": "WINTER",
+     "seasonYear": 2027,
+     "startDate": {
+      "year": 2027,
+      "month": 2,
+      "day": null
+     },
+     "endDate": {
+      "year": null,
+      "month": null,
+      "day": null
+     },
+     "genres": [
+      "Adventure"
+     ],
+     "averageScore": null,
+     "description": "To commemorate the <i>ONE PIECE</i> anime's 25th anniversary: <i>THE ONE PIECE</i> anime by WIT Studio will recreate the story of the original <i>ONE PIECE</i> manga, starting from the East Blue arc.<br><br>\n\n(Source: Netflix, edited)",
+     "siteUrl": "https://anilist.co/anime/171630",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx171630-2U7Y5OIWwXJJ.jpg",
+      "color": "#28aef1"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "WIT STUDIO"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 459,
+     "title": {
+      "romaji": "ONE PIECE (Movie)",
+      "english": "ONE PIECE: The Movie",
+      "native": "ONE PIECE (Movie)"
+     },
+     "format": "MOVIE",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 50,
+     "season": "WINTER",
+     "seasonYear": 2000,
+     "startDate": {
+      "year": 2000,
+      "month": 3,
+      "day": 4
+     },
+     "endDate": {
+      "year": 2000,
+      "month": 3,
+      "day": 4
+     },
+     "genres": [
+      "Action",
+      "Adventure",
+      "Comedy",
+      "Fantasy"
+     ],
+     "averageScore": 68,
+     "description": "There once was a pirate known as the Great Gold Pirate Woonan, who obtained almost 1/3 of the world's gold. Over the course of a few years, the pirate's existence faded, and a legend grew that he disappeared with his gold to a remote island, an island pirates continue to search for. Aboard the Going Merry, Luffy and his crew, starved and reckless, are robbed of their treasure. In an attempt to get it back, they wreck the getaway ship, guided by a young boy named Tabio, who's a captured part of El Drago's pirate crew. El Drago's love for gold has driven him to look for Woonan's island, and thanks to Woonan's treasure map, he finds it. During this time, Luffy's crew have been split up, and despite their own circumstances, they must find a way to stop El Drago from obtaining Woonan's gold. <br><br>\n(Source: Anime News Network)",
+     "siteUrl": "https://anilist.co/anime/459",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx459-Ivw65mUXackh.png",
+      "color": "#e40d0d"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "Toei Animation"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 19123,
+     "title": {
+      "romaji": "ONE PIECE: Episode of Merry - Mou Hitori no Nakama no Monogatari",
+      "english": "One Piece: Episode of Merry - The Tale of One More Friend",
+      "native": "ONE PIECE \u30a8\u30d4\u30bd\u30fc\u30c9\u30aa\u30d6\u30e1\u30ea\u30fc \u301c\u3082\u3046\u3072\u3068\u308a\u306e\u4ef2\u9593\u306e\u7269\u8a9e\u301c"
+     },
+     "format": "SPECIAL",
+     "status": "FINISHED",
+     "episodes": 1,
+     "duration": 106,
+     "season": "SUMMER",
+     "seasonYear": 2013,
+     "startDate": {
+      "year": 2013,
+      "month": 8,
+      "day": 24
+     },
+     "endDate": {
+      "year": 2013,
+      "month": 8,
+      "day": 24
+     },
+     "genres": [
+      "Action",
+      "Adventure",
+      "Comedy",
+      "Drama",
+      "Fantasy"
+     ],
+     "averageScore": 78,
+     "description": "The story arcs aboard the Straw Hat Crew's first ship Going Merry (Merry Go in some adaptations) are recreated with brand-new animation, from Luffy and Usopp's fight and Robin's disappearance to the crew's final farewell to the ship. Going Merry is treated as another member of the Straw Hats as Luffy, Zoro, Nami, and the rest of the crew set sail for the legendary treasure, the One Piece.<br><br>\n(Source: Anime News Network)",
+     "siteUrl": "https://anilist.co/anime/19123",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/nx19123-leET1CrSJknT.jpg",
+      "color": "#e4c95d"
+     },
+     "studios": {
+      "nodes": [
+       {
+        "name": "Toei Animation"
+       }
+      ]
+     },
+     "nextAiringEpisode": null
+    },
+    {
+     "id": 188668,
+     "title": {
+      "romaji": "Koisuru ONE PIECE",
+      "english": null,
+      "native": "\u604b\u3059\u308b\u30ef\u30f3\u30d4\u30fc\u30b9"
+     },
+     "format": "ONA",
+     "status": "FINISHED",
+     "episodes": 5,
+     "duration": 7,
+     "season": "SPRING",
+     "seasonYear": 2025,
+     "startDate": {
+      "year": 2025,
+      "month": 4,
+      "day": 1
+     },
+     "endDate": {
+      "year": 2025,
+      "month": 4,
+      "day": 5
+     },
+     "genres": [
+      "Comedy",
+      "Romance"
+     ],
+     "averageScore": 66,
+     "description": "The premise of this spinoff is about three high school students: a young male student, his girlfriend and a third wheel who is a One Piece fanatic. Their names are similar to the Straw Hat Pirates and the group form a fan club dedicated to One Piece.\n<br><Br>\n(Source: One Piece Wiki)",
+     "siteUrl": "https://anilist.co/anime/188668",
+     "coverImage": {
+      "large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx188668-rOB7rkgOz89w.jpg",
+      "color": "#35bbf1"
+     },
+     "studios": {
+      "nodes": []
+     },
+     "nextAiringEpisode": null
+    }
+   ]
+  }
+ }
+}

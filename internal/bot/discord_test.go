@@ -9,6 +9,7 @@ import (
 	"mizubot-go/internal/bot/commands"
 	"mizubot-go/internal/guildflags"
 	"mizubot-go/internal/guildinstructions"
+	"mizubot-go/internal/llm"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -277,5 +278,55 @@ func TestSplitDiscordMessages(t *testing.T) {
 	}
 	if got[1] != strings.Repeat("y", 50) {
 		t.Fatalf("second part = %q, want y run", got[1])
+	}
+}
+
+func TestDiscordEmbedsConvertsAndClamps(t *testing.T) {
+	long := strings.Repeat("あ", 5000)
+	fields := make([]llm.EmbedField, 30)
+	for i := range fields {
+		fields[i] = llm.EmbedField{Name: "n", Value: strings.Repeat("v", 2000), Inline: true}
+	}
+	got := discordEmbeds([]llm.Embed{{
+		Title:        long,
+		URL:          "https://anilist.co/anime/1",
+		Description:  long,
+		Color:        0x123456,
+		ThumbnailURL: "https://img/x.jpg",
+		Fields:       fields,
+		Footer:       "AniList ID 1",
+	}})
+	if len(got) != 1 {
+		t.Fatalf("embeds = %d, want 1", len(got))
+	}
+	e := got[0]
+	if n := len([]rune(e.Title)); n > 256 {
+		t.Errorf("title = %d runes, Discord caps at 256", n)
+	}
+	if n := len([]rune(e.Description)); n > 4096 {
+		t.Errorf("description = %d runes, Discord caps at 4096", n)
+	}
+	if len(e.Fields) != 25 {
+		t.Errorf("fields = %d, Discord caps at 25", len(e.Fields))
+	}
+	if n := len([]rune(e.Fields[0].Value)); n > 1024 {
+		t.Errorf("field value = %d runes, Discord caps at 1024", n)
+	}
+	if e.Color != 0x123456 || e.URL == "" || e.Thumbnail == nil || e.Thumbnail.URL != "https://img/x.jpg" || e.Footer == nil || e.Footer.Text != "AniList ID 1" {
+		t.Errorf("embed = %+v", e)
+	}
+}
+
+func TestDiscordEmbedsLimitsCountAndHandlesEmpty(t *testing.T) {
+	if got := discordEmbeds(nil); got != nil {
+		t.Fatalf("nil input = %v, want nil", got)
+	}
+	many := make([]llm.Embed, 15)
+	if got := discordEmbeds(many); len(got) != 10 {
+		t.Fatalf("embeds = %d, Discord caps a message at 10", len(got))
+	}
+	minimal := discordEmbeds([]llm.Embed{{Title: "Only title"}})[0]
+	if minimal.Thumbnail != nil || minimal.Footer != nil {
+		t.Errorf("optional parts should be omitted when unset: %+v", minimal)
 	}
 }

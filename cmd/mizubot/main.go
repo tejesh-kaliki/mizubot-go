@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"mizubot-go/internal/anilist"
 	"mizubot-go/internal/animefeed"
 	"mizubot-go/internal/bot"
 	"mizubot-go/internal/config"
@@ -17,6 +18,7 @@ import (
 	"mizubot-go/internal/guildinstructions"
 	"mizubot-go/internal/llm"
 	"mizubot-go/internal/llm/classifier"
+	"mizubot-go/internal/llm/judge"
 	llmtools "mizubot-go/internal/llm/tools"
 	"mizubot-go/internal/llmstats"
 	"mizubot-go/internal/pagemonitor"
@@ -86,7 +88,30 @@ func main() {
 	monitorService := pagemonitor.NewService(monitorStore)
 	llmStatsStore := llmstats.NewStore(database)
 
+	guildFlagsStore := guildflags.NewStore(database)
+
+	// AniList lookups need no API key. The Jev-backed picker and embed
+	// filter (below) are optional; the tools degrade without them.
+	anilistClient := anilist.NewClient(anilist.Config{})
+	var (
+		typeSafeClient *typesafe.Client
+		mediaPicker    llmtools.MediaPicker
+	)
+	if cfg.LLMJevAPIKey != "" {
+		typeSafeClient = typesafe.NewClient(typesafe.Config{
+			APIKey:  cfg.LLMJevAPIKey,
+			BaseURL: cfg.LLMJevBaseURL,
+			Model:   cfg.LLMJevModel,
+			Timeout: cfg.LLMJevTimeout,
+		})
+	}
+	typeSafeStatsStore := typesafestats.NewStore(database)
+	if typeSafeClient != nil {
+		mediaPicker = judge.NewMediaPicker(typeSafeClient, typeSafeStatsStore)
+	}
+
 	allTools := append(llmtools.NewReminderTools(reminderService, userSettingsService), llmtools.NewUserSettingsTools(userSettingsService)...)
+	allTools = append(allTools, llmtools.NewAniListTools(anilistClient, mediaPicker)...)
 	llmService := llm.NewServiceWithGuildInstructionProvider(llm.NewOpenAIClient(llm.OpenAIConfig{
 		BaseURL: cfg.LLMBaseURL,
 		Model:   cfg.LLMModel,
@@ -94,17 +119,9 @@ func main() {
 		Timeout: cfg.LLMTimeout,
 	}), guildInstructionStore, allTools...)
 
-	guildFlagsStore := guildflags.NewStore(database)
-
-	if cfg.LLMJevAPIKey != "" {
-		typeSafeClient := typesafe.NewClient(typesafe.Config{
-			APIKey:  cfg.LLMJevAPIKey,
-			BaseURL: cfg.LLMJevBaseURL,
-			Model:   cfg.LLMJevModel,
-			Timeout: cfg.LLMJevTimeout,
-		})
-		typeSafeStatsStore := typesafestats.NewStore(database)
+	if typeSafeClient != nil {
 		llmService.SetToolClassifier(classifier.New(typeSafeClient, typeSafeStatsStore, guildFlagsStore))
+		llmService.SetEmbedFilter(judge.NewEmbedFilter(typeSafeClient, typeSafeStatsStore))
 		log.Printf("typesafe tool classifier enabled: model=%s", typeSafeClient.Model())
 	}
 
