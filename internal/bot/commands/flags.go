@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"mizubot-go/internal/guildflags"
 
@@ -30,7 +31,8 @@ const (
 	flagsDescInputID      = "flags-desc-input"
 	flagsGuideInputID     = "flags-guidance-input"
 	flagsNameMaxLength    = 100
-	flagsFieldMaxLength   = 1000
+	// Discord caps a modal text input at 4000 characters.
+	flagsFieldMaxLength = 4000
 )
 
 // GuildFlagEditor is the subset of the guild flag store the flags command
@@ -68,6 +70,7 @@ func (m *FlagsModule) Handle(responder Responder, _ *discordgo.Session, i *disco
 		if i.ApplicationCommandData().Name != flagsCommandName {
 			return false
 		}
+		log.Printf("flags command received: guild_id=%s user_id=%s", i.GuildID, userIDFromInteraction(i))
 		if !m.authorized(responder, i, false) {
 			return true
 		}
@@ -119,15 +122,17 @@ func (m *FlagsModule) authorized(responder Responder, i *discordgo.InteractionCr
 }
 
 func (m *FlagsModule) showList(responder Responder, i *discordgo.InteractionCreate, update bool) {
+	start := time.Now()
 	flags, err := m.store.ListByGuild(context.Background(), i.GuildID)
+	log.Printf("flags list query: guild_id=%s count=%d elapsed=%s error=%v", i.GuildID, len(flags), time.Since(start), err)
 	if err != nil {
-		log.Printf("flags list failed: guild_id=%s error=%v", i.GuildID, err)
 		respondOrUpdate(responder, i, update, notAllowedEmbed("Failed to load this server's flags."), nil)
 		return
 	}
 
 	embed, components := buildListView(flags)
 	respondOrUpdate(responder, i, update, embed, components)
+	log.Printf("flags list responded: guild_id=%s total_elapsed=%s", i.GuildID, time.Since(start))
 }
 
 func buildListView(flags []guildflags.Flag) (*discordgo.MessageEmbed, []discordgo.MessageComponent) {
@@ -361,6 +366,12 @@ func (m *FlagsModule) openEditModal(responder Responder, i *discordgo.Interactio
 	}
 	if !ok {
 		responder.Respond(i, "That flag no longer exists.", true)
+		return
+	}
+	if len([]rune(flag.Description)) > flagsFieldMaxLength || len([]rune(flag.Guidance)) > flagsFieldMaxLength {
+		responder.Respond(i, fmt.Sprintf(
+			"This flag's description or guidance is longer than the %d characters Discord allows in an editor. Delete it and recreate it with shorter text.",
+			flagsFieldMaxLength), true)
 		return
 	}
 

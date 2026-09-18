@@ -393,10 +393,12 @@ func (b *Bot) Respond(i *discordgo.InteractionCreate, content string, ephemeral 
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral
 	}
-	_ = b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	if err := b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{Content: content, Flags: flags},
-	})
+	}); err != nil {
+		log.Printf("interaction respond failed: content=%q error=%v", content, err)
+	}
 }
 
 func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, ephemeral bool) {
@@ -404,13 +406,15 @@ func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.Mess
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral
 	}
-	_ = b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	if err := b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
 			Flags:  flags,
 		},
-	})
+	}); err != nil {
+		log.Printf("interaction respond embed failed: title=%q error=%v", embed.Title, err)
+	}
 }
 
 func (b *Bot) RespondEmbedWithComponents(i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, components []discordgo.MessageComponent, ephemeral bool) {
@@ -418,14 +422,16 @@ func (b *Bot) RespondEmbedWithComponents(i *discordgo.InteractionCreate, embed *
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral
 	}
-	_ = b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+	if err := b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds:     []*discordgo.MessageEmbed{embed},
 			Components: components,
 			Flags:      flags,
 		},
-	})
+	}); err != nil {
+		log.Printf("interaction respond embed+components failed: title=%q error=%v", embed.Title, err)
+	}
 }
 
 // UpdateMessage edits the message a component interaction was attached to.
