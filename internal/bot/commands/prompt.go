@@ -27,20 +27,6 @@ const (
 	promptPreviewLimit = 3900
 )
 
-// promptModPermissions are the permissions we treat as "runs this server".
-// Any one of them is enough to edit the server prompt.
-var promptModPermissions = []struct {
-	bit  int64
-	name string
-}{
-	{discordgo.PermissionAdministrator, "Administrator"},
-	{discordgo.PermissionManageServer, "Manage Server"},
-	{discordgo.PermissionManageMessages, "Manage Messages"},
-	{discordgo.PermissionModerateMembers, "Moderate Members"},
-	{discordgo.PermissionKickMembers, "Kick Members"},
-	{discordgo.PermissionBanMembers, "Ban Members"},
-}
-
 // GuildInstructionEditor is the subset of the guild instruction store the
 // prompt command needs.
 type GuildInstructionEditor interface {
@@ -138,34 +124,15 @@ func (m *PromptModule) authorize(responder Responder, i *discordgo.InteractionCr
 	responder.RespondEmbed(i, &discordgo.MessageEmbed{
 		Title:       "Not allowed",
 		Color:       promptEmbedColor,
-		Description: "Editing the server prompt needs one of: " + promptPermissionNames() + ".",
+		Description: "Editing the server prompt needs one of: " + guildModPermissionNames() + ".",
 	}, true)
 	return false
 }
 
 func (m *PromptModule) canEditPrompt(i *discordgo.InteractionCreate) bool {
-	if m.ownerDiscordID != "" && userIDFromInteraction(i) == m.ownerDiscordID {
-		return true
-	}
-	if i.Member == nil {
-		return false
-	}
 	// Discord computes Member.Permissions for the invoking channel on every
 	// interaction, so this already accounts for role and channel overwrites.
-	for _, perm := range promptModPermissions {
-		if i.Member.Permissions&perm.bit != 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func promptPermissionNames() string {
-	names := make([]string, 0, len(promptModPermissions))
-	for _, perm := range promptModPermissions {
-		names = append(names, perm.name)
-	}
-	return strings.Join(names, ", ")
+	return canEditGuildConfig(i, m.ownerDiscordID)
 }
 
 func (m *PromptModule) handleView(responder Responder, i *discordgo.InteractionCreate) {

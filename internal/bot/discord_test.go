@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"mizubot-go/internal/bot/commands"
+	"mizubot-go/internal/guildflags"
 	"mizubot-go/internal/guildinstructions"
 
 	"github.com/bwmarrin/discordgo"
@@ -100,7 +101,7 @@ func TestGuildDisplayNameUsesMessageMemberNickname(t *testing.T) {
 }
 
 func TestNewRequestsMessageContentIntent(t *testing.T) {
-	b, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, "")
+	b, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -121,8 +122,42 @@ func (stubGuildInstructions) Upsert(context.Context, string, string) (guildinstr
 
 func (stubGuildInstructions) Delete(context.Context, string) (bool, error) { return false, nil }
 
+type stubGuildFlags struct{}
+
+func (stubGuildFlags) Create(context.Context, string, string, string, string) (guildflags.Flag, error) {
+	return guildflags.Flag{}, nil
+}
+
+func (stubGuildFlags) ListByGuild(context.Context, string) ([]guildflags.Flag, error) {
+	return nil, nil
+}
+
+func (stubGuildFlags) Update(context.Context, int64, string, string, string) (guildflags.Flag, error) {
+	return guildflags.Flag{}, nil
+}
+
+func (stubGuildFlags) Delete(context.Context, int64, string) (bool, error) { return false, nil }
+
+func TestFlagsRegisteredOnlyWithAStore(t *testing.T) {
+	without, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if hasCommand(without.commandDefinitions(), "flags") {
+		t.Fatalf("flags registered without a guild flag store")
+	}
+
+	with, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, stubGuildFlags{}, "owner")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if !hasCommand(with.commandDefinitions(), "flags") {
+		t.Fatalf("flags missing from command definitions")
+	}
+}
+
 func TestEditPromptRegisteredOnlyWithAStore(t *testing.T) {
-	without, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, "")
+	without, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -130,7 +165,7 @@ func TestEditPromptRegisteredOnlyWithAStore(t *testing.T) {
 		t.Fatalf("edit-prompt registered without a guild instruction store")
 	}
 
-	with, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, stubGuildInstructions{}, "owner")
+	with, err := New("Bot faketoken", nil, nil, nil, nil, nil, nil, stubGuildInstructions{}, nil, "owner")
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -160,7 +195,7 @@ func TestOnInteractionCreateForwardsModalSubmits(t *testing.T) {
 	}{
 		{discordgo.InteractionApplicationCommand, true},
 		{discordgo.InteractionModalSubmit, true},
-		{discordgo.InteractionMessageComponent, false},
+		{discordgo.InteractionMessageComponent, true},
 		{discordgo.InteractionPing, false},
 	} {
 		module.seen = nil

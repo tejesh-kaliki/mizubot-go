@@ -94,6 +94,8 @@ func main() {
 		Timeout: cfg.LLMTimeout,
 	}), guildInstructionStore, allTools...)
 
+	guildFlagsStore := guildflags.NewStore(database)
+
 	if cfg.LLMJevAPIKey != "" {
 		typeSafeClient := typesafe.NewClient(typesafe.Config{
 			APIKey:  cfg.LLMJevAPIKey,
@@ -102,12 +104,11 @@ func main() {
 			Timeout: cfg.LLMJevTimeout,
 		})
 		typeSafeStatsStore := typesafestats.NewStore(database)
-		guildFlagsStore := guildflags.NewStore(database)
 		llmService.SetToolClassifier(classifier.New(typeSafeClient, typeSafeStatsStore, guildFlagsStore))
 		log.Printf("typesafe tool classifier enabled: model=%s", typeSafeClient.Model())
 	}
 
-	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore, guildInstructionStore, cfg.OwnerDiscordID)
+	discordBot, err := bot.New(cfg.DiscordToken, store, animeService, monitorService, llmService, userSettingsService, llmStatsStore, guildInstructionStore, guildFlagsStore, cfg.OwnerDiscordID)
 	if err != nil {
 		log.Fatalf("discord init error: %v", err)
 	}

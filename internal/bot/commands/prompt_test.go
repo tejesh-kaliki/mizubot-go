@@ -60,11 +60,14 @@ func (s *stubStore) Delete(_ context.Context, guildID string) (bool, error) {
 type stubResponder struct {
 	content     string
 	embed       *discordgo.MessageEmbed
+	components  []discordgo.MessageComponent
 	ephemeral   bool
 	modalID     string
 	modalTitle  string
 	modalRows   []discordgo.MessageComponent
 	modalErr    error
+	updateErr   error
+	updated     bool
 	respondents int
 }
 
@@ -80,6 +83,13 @@ func (r *stubResponder) RespondEmbed(_ *discordgo.InteractionCreate, embed *disc
 	r.respondents++
 }
 
+func (r *stubResponder) RespondEmbedWithComponents(_ *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, components []discordgo.MessageComponent, ephemeral bool) {
+	r.embed = embed
+	r.components = components
+	r.ephemeral = ephemeral
+	r.respondents++
+}
+
 func (r *stubResponder) RespondModal(_ *discordgo.InteractionCreate, customID, title string, components []discordgo.MessageComponent) error {
 	if r.modalErr != nil {
 		return r.modalErr
@@ -87,6 +97,17 @@ func (r *stubResponder) RespondModal(_ *discordgo.InteractionCreate, customID, t
 	r.modalID = customID
 	r.modalTitle = title
 	r.modalRows = components
+	r.respondents++
+	return nil
+}
+
+func (r *stubResponder) UpdateMessage(_ *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, components []discordgo.MessageComponent) error {
+	if r.updateErr != nil {
+		return r.updateErr
+	}
+	r.embed = embed
+	r.components = components
+	r.updated = true
 	r.respondents++
 	return nil
 }

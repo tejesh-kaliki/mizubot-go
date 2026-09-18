@@ -48,7 +48,7 @@ type Bot struct {
 	userSettings *usersettings.Service
 }
 
-func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service, llmLogger llmMessageLogger, guildInstructions commands.GuildInstructionEditor, ownerDiscordID string) (*Bot, error) {
+func New(token string, store *reminders.Store, animeService *animefeed.Service, monitorService *pagemonitor.Service, llmService *llm.Service, userSettingsService *usersettings.Service, llmLogger llmMessageLogger, guildInstructions commands.GuildInstructionEditor, guildFlags commands.GuildFlagEditor, ownerDiscordID string) (*Bot, error) {
 	s, err := discordgo.New(token)
 	if err != nil {
 		return nil, err
@@ -77,6 +77,9 @@ func New(token string, store *reminders.Store, animeService *animefeed.Service, 
 	}
 	if guildInstructions != nil {
 		modules = append(modules, commands.NewPromptModule(guildInstructions, ownerDiscordID))
+	}
+	if guildFlags != nil {
+		modules = append(modules, commands.NewFlagsModule(guildFlags, ownerDiscordID))
 	}
 	b := &Bot{
 		session:      s,
@@ -222,7 +225,9 @@ func (b *Bot) commandDefinitions() []*discordgo.ApplicationCommand {
 }
 
 func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.Type != discordgo.InteractionApplicationCommand && i.Type != discordgo.InteractionModalSubmit {
+	switch i.Type {
+	case discordgo.InteractionApplicationCommand, discordgo.InteractionModalSubmit, discordgo.InteractionMessageComponent:
+	default:
 		return
 	}
 	for _, module := range b.modules {
@@ -404,6 +409,34 @@ func (b *Bot) RespondEmbed(i *discordgo.InteractionCreate, embed *discordgo.Mess
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{embed},
 			Flags:  flags,
+		},
+	})
+}
+
+func (b *Bot) RespondEmbedWithComponents(i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, components []discordgo.MessageComponent, ephemeral bool) {
+	var flags discordgo.MessageFlags
+	if ephemeral {
+		flags = discordgo.MessageFlagsEphemeral
+	}
+	_ = b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds:     []*discordgo.MessageEmbed{embed},
+			Components: components,
+			Flags:      flags,
+		},
+	})
+}
+
+// UpdateMessage edits the message a component interaction was attached to.
+// Unlike the other responders this surfaces the error, since a failed update
+// leaves the interaction unanswered and the caller needs to fall back.
+func (b *Bot) UpdateMessage(i *discordgo.InteractionCreate, embed *discordgo.MessageEmbed, components []discordgo.MessageComponent) error {
+	return b.session.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseUpdateMessage,
+		Data: &discordgo.InteractionResponseData{
+			Embeds:     []*discordgo.MessageEmbed{embed},
+			Components: components,
 		},
 	})
 }
