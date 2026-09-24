@@ -37,21 +37,29 @@ type Config struct {
 	LLMJevBaseURL          string
 	LLMJevModel            string
 	LLMJevTimeout          time.Duration
+	ImageGenBaseURL        string
+	ImageGenTimeout        time.Duration
 }
 
 type fileConfig struct {
-	DiscordToken      string            `yaml:"discord_token"`
-	DatabasePath      string            `yaml:"database_path"`
-	TickInterval      string            `yaml:"tick_interval"`
-	Anime             animeFileConfig   `yaml:"anime"`
-	AWS               awsFileConfig     `yaml:"aws"`
-	Env               string            `yaml:"env"`
-	TestGuildID       string            `yaml:"test_guild_id"`
-	DryRun            bool              `yaml:"dry_run"`
-	LLM               llmFileConfig     `yaml:"llm"`
-	GuildInstructions map[string]string `yaml:"guild_instructions"`
-	LLMDebugHistory   bool              `yaml:"llm_debug_history"`
-	OwnerDiscordID    string            `yaml:"owner_discord_id"`
+	DiscordToken      string             `yaml:"discord_token"`
+	DatabasePath      string             `yaml:"database_path"`
+	TickInterval      string             `yaml:"tick_interval"`
+	Anime             animeFileConfig    `yaml:"anime"`
+	AWS               awsFileConfig      `yaml:"aws"`
+	Env               string             `yaml:"env"`
+	TestGuildID       string             `yaml:"test_guild_id"`
+	DryRun            bool               `yaml:"dry_run"`
+	LLM               llmFileConfig      `yaml:"llm"`
+	GuildInstructions map[string]string  `yaml:"guild_instructions"`
+	LLMDebugHistory   bool               `yaml:"llm_debug_history"`
+	OwnerDiscordID    string             `yaml:"owner_discord_id"`
+	ImageGen          imageGenFileConfig `yaml:"image_gen"`
+}
+
+type imageGenFileConfig struct {
+	BaseURL string `yaml:"base_url"`
+	Timeout string `yaml:"timeout"`
 }
 
 type animeFileConfig struct {
@@ -130,6 +138,8 @@ type envVals struct {
 	LLMJevBaseURL          string
 	LLMJevModel            string
 	LLMJevTimeout          string
+	ImageGenBaseURL        string
+	ImageGenTimeout        string
 }
 
 func osEnv() envVals {
@@ -159,6 +169,8 @@ func osEnv() envVals {
 		LLMJevBaseURL:          os.Getenv("LLM_JEV_BASE_URL"),
 		LLMJevModel:            os.Getenv("LLM_JEV_MODEL"),
 		LLMJevTimeout:          os.Getenv("LLM_JEV_TIMEOUT"),
+		ImageGenBaseURL:        os.Getenv("IMAGE_GEN_BASE_URL"),
+		ImageGenTimeout:        os.Getenv("IMAGE_GEN_TIMEOUT"),
 	}
 }
 
@@ -214,6 +226,12 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		jevTimeout = d
 	}
 
+	imageGenTimeoutStr := fallback(e.ImageGenTimeout, f.ImageGen.Timeout, "120s")
+	imageGenTimeout := 120 * time.Second
+	if d, err := time.ParseDuration(imageGenTimeoutStr); err == nil {
+		imageGenTimeout = d
+	}
+
 	return Config{
 		DiscordToken:           token,
 		DatabasePath:           dbPath,
@@ -240,6 +258,8 @@ func fromValues(f fileConfig, e envVals) (Config, error) {
 		LLMJevBaseURL:          fallback(e.LLMJevBaseURL, f.LLM.JevBaseURL, ""),
 		LLMJevModel:            fallback(e.LLMJevModel, f.LLM.JevModel, ""),
 		LLMJevTimeout:          jevTimeout,
+		ImageGenBaseURL:        fallback(e.ImageGenBaseURL, f.ImageGen.BaseURL, "http://host.docker.internal:8081"),
+		ImageGenTimeout:        imageGenTimeout,
 	}, nil
 }
 

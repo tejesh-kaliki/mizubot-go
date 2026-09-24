@@ -132,6 +132,17 @@ type ToolResult struct {
 	// Embeds are attached to the final reply. The EmbedFilter, when set,
 	// may drop them after the reply is written.
 	Embeds []Embed
+	// Attachments are files (e.g. a generated image) sent alongside the
+	// final reply. Unlike Embeds, these are not subject to the EmbedFilter.
+	Attachments []Attachment
+}
+
+// Attachment is a file a tool wants sent alongside the reply. It is
+// deliberately Discord-agnostic; the bot converts it when sending.
+type Attachment struct {
+	Filename    string
+	Data        []byte
+	ContentType string
 }
 
 type ToolHandler func(ctx context.Context, toolCtx ToolContext, args json.RawMessage) (ToolResult, error)
@@ -201,11 +212,12 @@ type Service struct {
 }
 
 type Response struct {
-	Content   string
-	Embeds    []Embed
-	Usage     Usage
-	LLMTurns  int64
-	ToolCalls int64
+	Content     string
+	Embeds      []Embed
+	Attachments []Attachment
+	Usage       Usage
+	LLMTurns    int64
+	ToolCalls   int64
 }
 
 func NewService(completer Completer, tools ...Tool) *Service {
@@ -345,6 +357,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	}
 	results := make([]toolExecutionResult, 0, len(decision.ToolCalls))
 	var embeds []Embed
+	var attachments []Attachment
 	toolCalls := int64(len(decision.ToolCalls))
 	for _, call := range decision.ToolCalls {
 		tool, ok := tools[call.Name]
@@ -360,6 +373,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 		}
 		results = append(results, toolExecutionResult{Name: call.Name, Result: result.Content})
 		embeds = append(embeds, result.Embeds...)
+		attachments = append(attachments, result.Attachments...)
 	}
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
@@ -379,6 +393,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	}
 	finalResponse.Usage = addUsage(usage, finalResponse.Usage)
 	finalResponse.Embeds = embeds
+	finalResponse.Attachments = attachments
 	finalResponse.LLMTurns = decisionResponse.LLMTurns + 1
 	finalResponse.ToolCalls = toolCalls
 	return finalResponse, nil
@@ -403,6 +418,7 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	var llmTurns int64
 	var toolCalls int64
 	var embeds []Embed
+	var attachments []Attachment
 
 	toolCtx := ToolContext{
 		UserID:    message.UserID,
@@ -420,7 +436,7 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 		llmTurns++
 		usage = addUsage(usage, response.Usage)
 		if len(response.ToolCalls) == 0 {
-			return Response{Content: strings.TrimSpace(response.Content), Embeds: embeds, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
+			return Response{Content: strings.TrimSpace(response.Content), Embeds: embeds, Attachments: attachments, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 		}
 		toolCalls += int64(len(response.ToolCalls))
 
@@ -430,8 +446,9 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 			ToolCalls: response.ToolCalls,
 		})
 		for _, call := range response.ToolCalls {
-			content, callEmbeds := executeToolCall(ctx, tools, toolCtx, call)
+			content, callEmbeds, callAttachments := executeToolCall(ctx, tools, toolCtx, call)
 			embeds = append(embeds, callEmbeds...)
+			attachments = append(attachments, callAttachments...)
 			messages = append(messages, ChatMessage{
 				Role:       "tool",
 				ToolName:   call.Name,
@@ -451,20 +468,20 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	}
 	llmTurns++
 	usage = addUsage(usage, final.Usage)
-	return Response{Content: strings.TrimSpace(final.Content), Embeds: embeds, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
+	return Response{Content: strings.TrimSpace(final.Content), Embeds: embeds, Attachments: attachments, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 }
 
-func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) (string, []Embed) {
+func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) (string, []Embed, []Attachment) {
 	tool, ok := tools[call.Name]
 	if !ok {
-		return "Error: unknown tool", nil
+		return "Error: unknown tool", nil, nil
 	}
 	log.Printf("llm tool call: name=%s user_id=%s channel_id=%s", call.Name, toolCtx.UserID, toolCtx.ChannelID)
 	result, err := tool.Execute(ctx, toolCtx, call.Arguments)
 	if err != nil {
-		return "Error: " + err.Error(), nil
+		return "Error: " + err.Error(), nil, nil
 	}
-	return result.Content, result.Embeds
+	return result.Content, result.Embeds, result.Attachments
 }
 
 func completeWithMetrics(ctx context.Context, completer Completer, request CompletionRequest) (Response, error) {

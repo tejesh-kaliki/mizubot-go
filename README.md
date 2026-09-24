@@ -50,6 +50,14 @@ For Docker Compose, a local gateway should be reached through the host gateway. 
 LLM_BASE_URL: "http://host.docker.internal:8080/v1"
 ```
 
+If a message asks for an image to be drawn or generated, the bot calls an image-generation
+HTTP service at `IMAGE_GEN_BASE_URL` (default `http://host.docker.internal:8081`), POSTing
+`{"prompt": "..."}` to `/generate` and attaching the returned PNG to the reply. This service
+is expected to run natively on the Docker host, not in a container — local image generation
+(e.g. the mflux/MLX wrapper in `imagegen/`) needs GPU access that a Linux container on macOS
+can't get. `IMAGE_GEN_TIMEOUT` (default `120s`) is generous since on-demand model loading is
+slow.
+
 ### Slash Commands
 
 - `/remind add message:<text> schedule:(once|hourly|daily) at:<10m|2h|3d|RFC3339|HH:MM|:MM>`

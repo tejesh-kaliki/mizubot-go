@@ -16,6 +16,7 @@ import (
 	"mizubot-go/internal/db"
 	"mizubot-go/internal/guildflags"
 	"mizubot-go/internal/guildinstructions"
+	"mizubot-go/internal/imagegen"
 	"mizubot-go/internal/llm"
 	"mizubot-go/internal/llm/classifier"
 	"mizubot-go/internal/llm/judge"
@@ -110,8 +111,17 @@ func main() {
 		mediaPicker = judge.NewMediaPicker(typeSafeClient, typeSafeStatsStore)
 	}
 
+	// Image generation runs on the Docker host (Metal/MLX needs GPU access a
+	// Linux container can't get); see imagegen/ in the repo root for that
+	// service.
+	imageGenClient := imagegen.NewClient(imagegen.Config{
+		BaseURL: cfg.ImageGenBaseURL,
+		Timeout: cfg.ImageGenTimeout,
+	})
+
 	allTools := append(llmtools.NewReminderTools(reminderService, userSettingsService), llmtools.NewUserSettingsTools(userSettingsService)...)
 	allTools = append(allTools, llmtools.NewAniListTools(anilistClient, mediaPicker)...)
+	allTools = append(allTools, llmtools.NewImageGenTools(imageGenClient)...)
 	llmService := llm.NewServiceWithGuildInstructionProvider(llm.NewOpenAIClient(llm.OpenAIConfig{
 		BaseURL: cfg.LLMBaseURL,
 		Model:   cfg.LLMModel,

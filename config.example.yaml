@@ -17,6 +17,13 @@ llm:
   model: "llama3.2"
   api_key: ""     # optional, forwarded as a Bearer token
   timeout: "60s"
+# Optional: a local image-generation HTTP service (e.g. the mflux/MLX wrapper
+# in imagegen/), reached through the Docker host gateway since Metal/MLX
+# needs GPU access a Linux container can't get. Override with
+# IMAGE_GEN_BASE_URL / IMAGE_GEN_TIMEOUT.
+image_gen:
+  base_url: "http://host.docker.internal:8081"
+  timeout: "120s"
 
 # Optional
 env: "test"            # or "prod"

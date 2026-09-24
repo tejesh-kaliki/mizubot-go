@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -266,8 +267,11 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 	response := "Hello"
 	var embeds []*discordgo.MessageEmbed
+	var files []*discordgo.File
 	if b.llm != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		// 3 minutes: generous enough for the image-gen tool, which loads
+		// the diffusion model on demand and can run well past 60s.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		stopTyping := b.startTyping(ctx, s, m.ChannelID)
 
 		log.Printf("generating llm response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
@@ -292,9 +296,10 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 			log.Printf("llm response generation failed: channel_id=%s user_id=%s message_id=%s error=%v", m.ChannelID, m.Author.ID, m.ID, err)
 			response = "I couldn't generate a response right now."
 			b.logLLMMessage(ctx, m, llm.Response{}, latency, llmstats.StatusError, err.Error())
-		} else if generated.Content != "" || len(generated.Embeds) > 0 {
+		} else if generated.Content != "" || len(generated.Embeds) > 0 || len(generated.Attachments) > 0 {
 			response = generated.Content
 			embeds = discordEmbeds(generated.Embeds)
+			files = discordFiles(generated.Attachments)
 			b.logLLMMessage(ctx, m, generated, latency, llmstats.StatusSuccess, "")
 		} else {
 			log.Printf("llm returned empty response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
@@ -306,17 +311,18 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		log.Printf("llm service not configured; using fallback response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
 	}
 	responses := splitDiscordMessages(response)
-	if len(responses) == 0 && len(embeds) > 0 {
-		// Embed-only reply: no text to split, but there is still a message to send.
+	if len(responses) == 0 && (len(embeds) > 0 || len(files) > 0) {
+		// Embed/attachment-only reply: no text to split, but there is still a message to send.
 		responses = []string{""}
 	}
 	for idx, part := range responses {
 		var err error
 		if idx == 0 {
-			// Embeds ride on the first message so they sit right under the reply's opening.
+			// Embeds and files ride on the first message so they sit right under the reply's opening.
 			_, err = s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
 				Content:   part,
 				Embeds:    embeds,
+				Files:     files,
 				Reference: m.Reference(),
 			})
 		} else {
@@ -595,6 +601,29 @@ func discordEmbeds(embeds []llm.Embed) []*discordgo.MessageEmbed {
 			})
 		}
 		out = append(out, embed)
+	}
+	return out
+}
+
+// maxDiscordFiles is Discord's per-message attachment limit.
+const maxDiscordFiles = 10
+
+// discordFiles converts Discord-agnostic tool attachments into discordgo
+// files, clamping to Discord's per-message limit.
+func discordFiles(attachments []llm.Attachment) []*discordgo.File {
+	if len(attachments) == 0 {
+		return nil
+	}
+	if len(attachments) > maxDiscordFiles {
+		attachments = attachments[:maxDiscordFiles]
+	}
+	out := make([]*discordgo.File, 0, len(attachments))
+	for _, a := range attachments {
+		out = append(out, &discordgo.File{
+			Name:        a.Filename,
+			ContentType: a.ContentType,
+			Reader:      bytes.NewReader(a.Data),
+		})
 	}
 	return out
 }
