@@ -121,9 +121,19 @@ func TestShouldTriggerLLM(t *testing.T) {
 		Content:           "no mention text here, just a reply",
 		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
 		ReferencedMessage: &discordgo.Message{ID: "m1", Author: &discordgo.User{ID: "bot1"}},
+		Mentions:          []*discordgo.User{{ID: "bot1"}},
 	}
 	if !shouldTriggerLLM(s, replyNoMention) {
-		t.Fatalf("reply to the bot's message with no explicit mention should still trigger the LLM")
+		t.Fatalf("reply to the bot's message with ping on should trigger the LLM")
+	}
+
+	replyPingOff := &discordgo.Message{
+		Content:           "reply with ping turned off",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: &discordgo.Message{ID: "m1", Author: &discordgo.User{ID: "bot1"}},
+	}
+	if shouldTriggerLLM(s, replyPingOff) {
+		t.Fatalf("reply to the bot's message with ping off should not trigger the LLM")
 	}
 
 	replyToOtherUserNoMention := &discordgo.Message{
@@ -149,6 +159,7 @@ func TestReplyToBotWithoutMentionTriggersAndUsesReplyChainHistory(t *testing.T) 
 		Author:            &discordgo.User{ID: "user1", Username: "account1"},
 		MessageReference:  &discordgo.MessageReference{ChannelID: "chan1", MessageID: "botmsg"},
 		ReferencedMessage: botReply,
+		Mentions:          []*discordgo.User{{ID: "bot1"}},
 	}
 
 	if !shouldTriggerLLM(s, userReply) {

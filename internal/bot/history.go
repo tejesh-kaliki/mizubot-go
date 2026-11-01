@@ -58,7 +58,7 @@ func isReplyToBot(s *discordgo.Session, msg *discordgo.Message) bool {
 
 // shouldTriggerLLM reports whether msg should prompt an LLM response: either
 // an explicit @mention of this bot, or a reply to one of this bot's own
-// messages.
+// messages with the reply ping left on.
 func shouldTriggerLLM(s *discordgo.Session, msg *discordgo.Message) bool {
 	if s == nil || s.State == nil || s.State.User == nil {
 		return false
@@ -66,7 +66,18 @@ func shouldTriggerLLM(s *discordgo.Session, msg *discordgo.Message) bool {
 	if messageMentionsUser(msg.Content, s.State.User.ID) {
 		return true
 	}
-	return isReplyToBot(s, msg)
+	// Discord only lists the bot in Mentions for a reply when the user left the
+	// reply ping on; with it off, the user didn't mean to address the bot.
+	return isReplyToBot(s, msg) && mentionsInList(msg.Mentions, s.State.User.ID)
+}
+
+func mentionsInList(users []*discordgo.User, id string) bool {
+	for _, u := range users {
+		if u != nil && u.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // historySourcePath reports which strategy buildConversationHistory used for
