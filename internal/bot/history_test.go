@@ -149,6 +149,31 @@ func TestShouldTriggerLLM(t *testing.T) {
 	if shouldTriggerLLM(s, plainMsg) {
 		t.Fatalf("plain message with no mention or reply-to-bot should not trigger the LLM")
 	}
+
+	rewrite := &discordgo.Message{
+		ID:      "m1",
+		Content: formatLinkRewrite("222", "https://fixupx.com/thdxr/status/2116735229792522518/en"),
+		Author:  &discordgo.User{ID: "bot1"},
+	}
+	replyToRewrite := &discordgo.Message{
+		Content:           "lol",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: rewrite,
+		Mentions:          []*discordgo.User{{ID: "bot1"}},
+	}
+	if shouldTriggerLLM(s, replyToRewrite) {
+		t.Fatalf("reply to a link rewrite with no explicit mention should not trigger the LLM")
+	}
+
+	mentionOnRewrite := &discordgo.Message{
+		Content:           "<@bot1> what is this",
+		MessageReference:  &discordgo.MessageReference{MessageID: "m1"},
+		ReferencedMessage: rewrite,
+		Mentions:          []*discordgo.User{{ID: "bot1"}},
+	}
+	if !shouldTriggerLLM(s, mentionOnRewrite) {
+		t.Fatalf("explicit mention in a reply to a link rewrite should trigger the LLM")
+	}
 }
 
 func TestReplyToBotWithoutMentionTriggersAndUsesReplyChainHistory(t *testing.T) {

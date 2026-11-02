@@ -14,6 +14,10 @@ import (
 // dropped when rewriting.
 var tweetLinkRE = regexp.MustCompile(`https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/(\w{1,15})/status/(\d+)[^\s<>|)]*`)
 
+// linkRewriteMessageRE matches a repost this bot made. Replies to those posts
+// are not treated as a request for the bot unless they also @mention it.
+var linkRewriteMessageRE = regexp.MustCompile(`(?s)^Shared by <@!?\d+>\n.*https://fixupx\.com/\w{1,15}/status/\d+/en`)
+
 // rewriteTweetLinks swaps every tweet link for its tracking-free fixupx.com
 // equivalent with a /en suffix. Links wrapped in <...> are left alone since the
 // author deliberately suppressed their embed.
@@ -55,17 +59,19 @@ func (b *Bot) fixTweetLinks(s *discordgo.Session, m *discordgo.MessageCreate) bo
 	if !ok {
 		return false
 	}
-	content := fmt.Sprintf("Shared by <@%s>\n%s", m.Author.ID, fixed)
+	content := formatLinkRewrite(m.Author.ID, fixed)
 	if len(content) > 2000 {
 		return false
 	}
 	if b.dryRun {
 		return true
 	}
+	// Parse stays empty so "Shared by" does not ping the author. Users and
+	// roles list only the pings the original message already made.
 	_, err := s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
 		Content:         content,
 		Reference:       m.MessageReference,
-		AllowedMentions: &discordgo.MessageAllowedMentions{Parse: []discordgo.AllowedMentionType{}, Users: nil, RepliedUser: false},
+		AllowedMentions: tweetLinkAllowedMentions(m.Message),
 	})
 	if err != nil {
 		log.Printf("link fix repost failed: channel_id=%s message_id=%s error=%v", m.ChannelID, m.ID, err)
@@ -75,4 +81,53 @@ func (b *Bot) fixTweetLinks(s *discordgo.Session, m *discordgo.MessageCreate) bo
 		log.Printf("link fix delete failed (needs Manage Messages): channel_id=%s message_id=%s error=%v", m.ChannelID, m.ID, err)
 	}
 	return true
+}
+
+func formatLinkRewrite(authorID, body string) string {
+	return fmt.Sprintf("Shared by <@%s>\n%s", authorID, body)
+}
+
+// isLinkRewriteMessage reports whether content is one of this bot's tweet
+// link reposts.
+func isLinkRewriteMessage(content string) bool {
+	return linkRewriteMessageRE.MatchString(content)
+}
+
+// tweetLinkAllowedMentions lets the repost ping the same users and roles as
+// the original message. The sharing user is not added, so the attribution
+// line stays silent unless that user was mentioned in the message itself.
+// A reply pings its target only when the original reply ping was left on,
+// which is when Discord includes that author in Mentions.
+func tweetLinkAllowedMentions(m *discordgo.Message) *discordgo.MessageAllowedMentions {
+	allowed := &discordgo.MessageAllowedMentions{}
+	if m == nil {
+		return allowed
+	}
+	allowed.Users = mentionUserIDs(m.Mentions)
+	if len(m.MentionRoles) > 0 {
+		allowed.Roles = append([]string(nil), m.MentionRoles...)
+	}
+	if m.ReferencedMessage != nil && m.ReferencedMessage.Author != nil {
+		allowed.RepliedUser = mentionsInList(m.Mentions, m.ReferencedMessage.Author.ID)
+	}
+	return allowed
+}
+
+func mentionUserIDs(users []*discordgo.User) []string {
+	if len(users) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(users))
+	seen := make(map[string]struct{}, len(users))
+	for _, user := range users {
+		if user == nil || user.ID == "" {
+			continue
+		}
+		if _, ok := seen[user.ID]; ok {
+			continue
+		}
+		seen[user.ID] = struct{}{}
+		ids = append(ids, user.ID)
+	}
+	return ids
 }
