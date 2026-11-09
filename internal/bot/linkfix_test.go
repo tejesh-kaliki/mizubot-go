@@ -62,7 +62,7 @@ func TestTweetLinkAllowedMentions(t *testing.T) {
 			Author: &discordgo.User{ID: "user-b"},
 		},
 	}
-	got := tweetLinkAllowedMentions(msg)
+	got := linkRewriteAllowedMentions(msg)
 	wantUsers := []string{"user-b", "user-c"}
 	if !reflect.DeepEqual(got.Users, wantUsers) {
 		t.Fatalf("users = %#v, want %#v", got.Users, wantUsers)
@@ -83,11 +83,116 @@ func TestTweetLinkAllowedMentions(t *testing.T) {
 			Author: &discordgo.User{ID: "user-b"},
 		},
 	}
-	if tweetLinkAllowedMentions(pingOff).RepliedUser {
+	if linkRewriteAllowedMentions(pingOff).RepliedUser {
 		t.Fatal("reply with the ping off should not ping the replied user")
 	}
 
-	if tweetLinkAllowedMentions(nil).RepliedUser || tweetLinkAllowedMentions(&discordgo.Message{}).Users != nil {
+	if linkRewriteAllowedMentions(nil).RepliedUser || linkRewriteAllowedMentions(&discordgo.Message{}).Users != nil {
 		t.Fatal("messages with no mentions should allow none")
+	}
+}
+
+func TestRewriteInstagramLinks(t *testing.T) {
+	tests := []struct {
+		in      string
+		want    string
+		changed bool
+	}{
+		{
+			in:      "https://www.instagram.com/p/CxAbCdEfGhI/?igsh=abc&utm_source=ig_web_copy_link",
+			want:    "https://vxinstagram.com/p/CxAbCdEfGhI",
+			changed: true,
+		},
+		{
+			in:      "look https://instagram.com/reel/CxAbCdEfGhI/?igsh=abc lol",
+			want:    "look https://vxinstagram.com/reel/CxAbCdEfGhI lol",
+			changed: true,
+		},
+		{
+			in:      "https://m.instagram.com/reels/CxAbCdEfGhI/",
+			want:    "https://vxinstagram.com/reels/CxAbCdEfGhI",
+			changed: true,
+		},
+		{
+			in:      "https://www.instagram.com/p/CxAbCdEfGhI/?img_index=2&igsh=abc",
+			want:    "https://vxinstagram.com/p/CxAbCdEfGhI/2",
+			changed: true,
+		},
+		{
+			in:      "https://www.instagram.com/p/CxAbCdEfGhI/3/?igsh=abc",
+			want:    "https://vxinstagram.com/p/CxAbCdEfGhI/3",
+			changed: true,
+		},
+		{
+			in:      "https://www.instagram.com/some.user/reel/CxAbCdEfGhI/",
+			want:    "https://vxinstagram.com/some.user/reel/CxAbCdEfGhI",
+			changed: true,
+		},
+		{
+			in:      "https://instagram.com/stories/some.user/123456789012345/",
+			want:    "https://vxinstagram.com/stories/some.user/123456789012345",
+			changed: true,
+		},
+		{
+			in:      "https://www.instagram.com/stories/some.user/",
+			want:    "https://vxinstagram.com/stories/some.user",
+			changed: true,
+		},
+		{
+			in:      "https://www.instagram.com/share/p/BACxYz123abc/",
+			want:    "https://vxinstagram.com/share/p/BACxYz123abc",
+			changed: true,
+		},
+		{
+			in:      "https://instagr.am/share/BACxYz123abc?igsh=abc",
+			want:    "https://vxinstagram.com/share/BACxYz123abc",
+			changed: true,
+		},
+		{
+			in:      "https://www.instagram.com/tv/CxAbCdEfGhI/",
+			want:    "https://vxinstagram.com/tv/CxAbCdEfGhI",
+			changed: true,
+		},
+		{
+			in:      "see https://www.instagram.com/p/CxAbCdEfGhI/.",
+			want:    "see https://vxinstagram.com/p/CxAbCdEfGhI.",
+			changed: true,
+		},
+		{in: "<https://www.instagram.com/p/CxAbCdEfGhI/>", want: "<https://www.instagram.com/p/CxAbCdEfGhI/>"},
+		{
+			in:      "https://instagram.com/some.user/ and https://instagram.com/p/CxAbCdEfGhI/",
+			want:    "https://instagram.com/some.user/ and https://vxinstagram.com/p/CxAbCdEfGhI",
+			changed: true,
+		},
+		{in: "https://www.instagram.com/some.user/", want: "https://www.instagram.com/some.user/"},
+		{in: "https://www.instagram.com/explore/tags/cats/", want: "https://www.instagram.com/explore/tags/cats/"},
+		{in: "https://www.instagram.com/stories/highlights/123456789/", want: "https://www.instagram.com/stories/highlights/123456789/"},
+		{in: "https://example.com/instagram.com/p/CxAbCdEfGhI/", want: "https://example.com/instagram.com/p/CxAbCdEfGhI/"},
+		{in: "no links", want: "no links"},
+	}
+	for _, tt := range tests {
+		got, changed := rewriteInstagramLinks(tt.in)
+		if got != tt.want || changed != tt.changed {
+			t.Errorf("rewriteInstagramLinks(%q) = %q, %v; want %q, %v", tt.in, got, changed, tt.want, tt.changed)
+		}
+	}
+}
+
+func TestRewriteEmbedLinksMixed(t *testing.T) {
+	in := "https://x.com/thdxr/status/2116735229792522518?s=19 and https://www.instagram.com/reel/CxAbCdEfGhI/?igsh=abc"
+	want := "https://fixupx.com/thdxr/status/2116735229792522518/en and https://vxinstagram.com/reel/CxAbCdEfGhI"
+	got, changed := rewriteEmbedLinks(in)
+	if !changed || got != want {
+		t.Fatalf("rewriteEmbedLinks(%q) = %q, %v; want %q, true", in, got, changed, want)
+	}
+}
+
+func TestIsInstagramLinkRewriteMessage(t *testing.T) {
+	body, changed := rewriteInstagramLinks("https://www.instagram.com/p/CxAbCdEfGhI/?igsh=abc")
+	if !changed {
+		t.Fatal("expected the sample instagram link to be rewritten")
+	}
+	if !isLinkRewriteMessage(formatLinkRewrite("42", body)) {
+		t.Fatalf("repost %q should be recognized as a link rewrite", formatLinkRewrite("42", body))
 	}
 }

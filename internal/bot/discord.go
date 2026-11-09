@@ -257,7 +257,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 	if m.Author.ID == s.State.User.ID || m.Content == "" {
 		return
 	}
-	if b.fixTweetLinks(s, m) {
+	if b.fixEmbedLinks(s, m) {
 		return
 	}
 	if !shouldTriggerLLM(s, m.Message) {

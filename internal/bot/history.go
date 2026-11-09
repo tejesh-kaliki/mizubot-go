@@ -58,8 +58,8 @@ func isReplyToBot(s *discordgo.Session, msg *discordgo.Message) bool {
 
 // shouldTriggerLLM reports whether msg should prompt an LLM response: either
 // an explicit @mention of this bot, or a reply to one of this bot's own
-// messages with the reply ping left on. A reply to a tweet-link repost does
-// not count, unless that reply also @mentions the bot.
+// messages with the reply ping left on. A reply to a link repost does not
+// count, unless that reply also @mentions the bot.
 func shouldTriggerLLM(s *discordgo.Session, msg *discordgo.Message) bool {
 	if s == nil || s.State == nil || s.State.User == nil {
 		return false
