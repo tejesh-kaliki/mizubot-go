@@ -230,6 +230,9 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	default:
 		return
 	}
+	if b.handleLinkRewriteInteraction(s, i) {
+		return
+	}
 	for _, module := range b.modules {
 		if b.handleInteraction(module, s, i) {
 			return
