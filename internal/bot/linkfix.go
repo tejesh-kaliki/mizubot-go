@@ -35,7 +35,7 @@ const (
 
 // linkRewriteMessageRE matches a repost this bot made. Replies to those posts
 // are not treated as a request for the bot unless they also @mention it.
-var linkRewriteMessageRE = regexp.MustCompile(`(?s)^Shared by <@!?\d+>\n.*https://(?:fixupx\.com/\w{1,15}/status/\d+/en|vxinstagram\.com/)`)
+var linkRewriteMessageRE = regexp.MustCompile(`(?s)^Shared by <@!?\d+>\n.*https://(?:fixupx\.com/\w{1,15}/status/\d+/en|oginstagram\.com/)`)
 
 // linkRewriteAuthorRE is the attribution line. The edit box never includes it,
 // so saving an edit cannot drop the mention of the person who shared the link.
@@ -77,9 +77,9 @@ func rewriteTweetLinks(content string) (string, bool) {
 	return sb.String(), true
 }
 
-// rewriteInstagramLinks swaps Instagram media links for vxinstagram.com so
+// rewriteInstagramLinks swaps Instagram media links for oginstagram.com so
 // Discord can embed the photo or video. Tracking query parameters are dropped.
-// An album's img_index is kept as a path suffix, which vxinstagram treats as
+// An album's img_index is kept as a path suffix, which oginstagram treats as
 // 1-based. Links wrapped in <...> are left alone.
 func rewriteInstagramLinks(content string) (string, bool) {
 	matches := instagramLinkRE.FindAllStringIndex(content, -1)
@@ -100,7 +100,7 @@ func rewriteInstagramLinks(content string) (string, bool) {
 			continue
 		}
 		sb.WriteString(content[last:start])
-		sb.WriteString("https://vxinstagram.com/")
+		sb.WriteString("https://oginstagram.com/")
 		sb.WriteString(path)
 		last = end
 		changed = true
@@ -120,8 +120,8 @@ func rewriteEmbedLinks(content string) (string, bool) {
 	return rewritten, tweetChanged || instagramChanged
 }
 
-// instagramEmbedPath returns the vxinstagram path for a media URL. Profiles
-// and other pages vxinstagram does not embed return false.
+// instagramEmbedPath returns the oginstagram path for a media URL. Profiles
+// and other pages oginstagram does not embed return false.
 func instagramEmbedPath(raw string) (string, bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Hostname() == "" {

@@ -103,68 +103,68 @@ func TestRewriteInstagramLinks(t *testing.T) {
 	}{
 		{
 			in:      "https://www.instagram.com/p/CxAbCdEfGhI/?igsh=abc&utm_source=ig_web_copy_link",
-			want:    "https://vxinstagram.com/p/CxAbCdEfGhI",
+			want:    "https://oginstagram.com/p/CxAbCdEfGhI",
 			changed: true,
 		},
 		{
 			in:      "look https://instagram.com/reel/CxAbCdEfGhI/?igsh=abc lol",
-			want:    "look https://vxinstagram.com/reel/CxAbCdEfGhI lol",
+			want:    "look https://oginstagram.com/reel/CxAbCdEfGhI lol",
 			changed: true,
 		},
 		{
 			in:      "https://m.instagram.com/reels/CxAbCdEfGhI/",
-			want:    "https://vxinstagram.com/reels/CxAbCdEfGhI",
+			want:    "https://oginstagram.com/reels/CxAbCdEfGhI",
 			changed: true,
 		},
 		{
 			in:      "https://www.instagram.com/p/CxAbCdEfGhI/?img_index=2&igsh=abc",
-			want:    "https://vxinstagram.com/p/CxAbCdEfGhI/2",
+			want:    "https://oginstagram.com/p/CxAbCdEfGhI/2",
 			changed: true,
 		},
 		{
 			in:      "https://www.instagram.com/p/CxAbCdEfGhI/3/?igsh=abc",
-			want:    "https://vxinstagram.com/p/CxAbCdEfGhI/3",
+			want:    "https://oginstagram.com/p/CxAbCdEfGhI/3",
 			changed: true,
 		},
 		{
 			in:      "https://www.instagram.com/some.user/reel/CxAbCdEfGhI/",
-			want:    "https://vxinstagram.com/some.user/reel/CxAbCdEfGhI",
+			want:    "https://oginstagram.com/some.user/reel/CxAbCdEfGhI",
 			changed: true,
 		},
 		{
 			in:      "https://instagram.com/stories/some.user/123456789012345/",
-			want:    "https://vxinstagram.com/stories/some.user/123456789012345",
+			want:    "https://oginstagram.com/stories/some.user/123456789012345",
 			changed: true,
 		},
 		{
 			in:      "https://www.instagram.com/stories/some.user/",
-			want:    "https://vxinstagram.com/stories/some.user",
+			want:    "https://oginstagram.com/stories/some.user",
 			changed: true,
 		},
 		{
 			in:      "https://www.instagram.com/share/p/BACxYz123abc/",
-			want:    "https://vxinstagram.com/share/p/BACxYz123abc",
+			want:    "https://oginstagram.com/share/p/BACxYz123abc",
 			changed: true,
 		},
 		{
 			in:      "https://instagr.am/share/BACxYz123abc?igsh=abc",
-			want:    "https://vxinstagram.com/share/BACxYz123abc",
+			want:    "https://oginstagram.com/share/BACxYz123abc",
 			changed: true,
 		},
 		{
 			in:      "https://www.instagram.com/tv/CxAbCdEfGhI/",
-			want:    "https://vxinstagram.com/tv/CxAbCdEfGhI",
+			want:    "https://oginstagram.com/tv/CxAbCdEfGhI",
 			changed: true,
 		},
 		{
 			in:      "see https://www.instagram.com/p/CxAbCdEfGhI/.",
-			want:    "see https://vxinstagram.com/p/CxAbCdEfGhI.",
+			want:    "see https://oginstagram.com/p/CxAbCdEfGhI.",
 			changed: true,
 		},
 		{in: "<https://www.instagram.com/p/CxAbCdEfGhI/>", want: "<https://www.instagram.com/p/CxAbCdEfGhI/>"},
 		{
 			in:      "https://instagram.com/some.user/ and https://instagram.com/p/CxAbCdEfGhI/",
-			want:    "https://instagram.com/some.user/ and https://vxinstagram.com/p/CxAbCdEfGhI",
+			want:    "https://instagram.com/some.user/ and https://oginstagram.com/p/CxAbCdEfGhI",
 			changed: true,
 		},
 		{in: "https://www.instagram.com/some.user/", want: "https://www.instagram.com/some.user/"},
@@ -183,7 +183,7 @@ func TestRewriteInstagramLinks(t *testing.T) {
 
 func TestRewriteEmbedLinksMixed(t *testing.T) {
 	in := "https://x.com/thdxr/status/2116735229792522518?s=19 and https://www.instagram.com/reel/CxAbCdEfGhI/?igsh=abc"
-	want := "https://fixupx.com/thdxr/status/2116735229792522518/en and https://vxinstagram.com/reel/CxAbCdEfGhI"
+	want := "https://fixupx.com/thdxr/status/2116735229792522518/en and https://oginstagram.com/reel/CxAbCdEfGhI"
 	got, changed := rewriteEmbedLinks(in)
 	if !changed || got != want {
 		t.Fatalf("rewriteEmbedLinks(%q) = %q, %v; want %q, true", in, got, changed, want)
