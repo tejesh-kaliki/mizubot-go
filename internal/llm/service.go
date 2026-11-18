@@ -127,8 +127,30 @@ type Embed struct {
 	Intent string
 }
 
+// Action is a button shown under the reply after a tool ran. ID is opaque to
+// the bot; it is handed back to the owning Tool's HandleAction on click.
+type Action struct {
+	Label  string
+	ID     string
+	Danger bool
+}
+
+// ToolRun records one tool execution that actually happened, so the reply can
+// show proof of it independent of what the LLM claims in prose.
+type ToolRun struct {
+	Tool string
+	// Status is a short human line such as "Created reminder #12".
+	Status  string
+	OK      bool
+	Actions []Action
+}
+
 type ToolResult struct {
 	Content string
+	// Status overrides the default one-line summary shown under the reply.
+	Status string
+	// Actions are buttons shown under the reply, handled by Tool.HandleAction.
+	Actions []Action
 	// Embeds are attached to the final reply. The EmbedFilter, when set,
 	// may drop them after the reply is written.
 	Embeds []Embed
@@ -154,6 +176,9 @@ type Tool struct {
 	// call). The LLM still decides whether to actually call them.
 	ImpliesTools []string
 	Execute      ToolHandler
+	// HandleAction runs a button click for an Action this tool returned. It
+	// returns a short status line describing the outcome.
+	HandleAction func(ctx context.Context, toolCtx ToolContext, actionID string) (string, error)
 }
 
 type GuildInstructionProvider interface {
@@ -203,6 +228,7 @@ type Service struct {
 type Response struct {
 	Content   string
 	Embeds    []Embed
+	ToolRuns  []ToolRun
 	Usage     Usage
 	LLMTurns  int64
 	ToolCalls int64
@@ -345,21 +371,17 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	}
 	results := make([]toolExecutionResult, 0, len(decision.ToolCalls))
 	var embeds []Embed
+	var runs []ToolRun
 	toolCalls := int64(len(decision.ToolCalls))
 	for _, call := range decision.ToolCalls {
-		tool, ok := tools[call.Name]
-		if !ok {
-			results = append(results, toolExecutionResult{Name: call.Name, Error: "unknown tool"})
-			continue
+		content, callEmbeds, run := executeToolCall(ctx, tools, toolCtx, ChatToolCall{Name: call.Name, Arguments: call.Args})
+		runs = append(runs, run)
+		embeds = append(embeds, callEmbeds...)
+		if run.OK {
+			results = append(results, toolExecutionResult{Name: call.Name, Result: content})
+		} else {
+			results = append(results, toolExecutionResult{Name: call.Name, Error: strings.TrimPrefix(content, "Error: ")})
 		}
-		log.Printf("llm tool call: name=%s user_id=%s channel_id=%s", call.Name, message.UserID, message.ChannelID)
-		result, err := tool.Execute(ctx, toolCtx, call.Args)
-		if err != nil {
-			results = append(results, toolExecutionResult{Name: call.Name, Error: err.Error()})
-			continue
-		}
-		results = append(results, toolExecutionResult{Name: call.Name, Result: result.Content})
-		embeds = append(embeds, result.Embeds...)
 	}
 
 	resultJSON, err := json.MarshalIndent(results, "", "  ")
@@ -379,6 +401,7 @@ func (s *Service) generateWithTools(ctx context.Context, message Message, tools 
 	}
 	finalResponse.Usage = addUsage(usage, finalResponse.Usage)
 	finalResponse.Embeds = embeds
+	finalResponse.ToolRuns = runs
 	finalResponse.LLMTurns = decisionResponse.LLMTurns + 1
 	finalResponse.ToolCalls = toolCalls
 	return finalResponse, nil
@@ -403,6 +426,7 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	var llmTurns int64
 	var toolCalls int64
 	var embeds []Embed
+	var runs []ToolRun
 
 	toolCtx := ToolContext{
 		UserID:    message.UserID,
@@ -420,7 +444,7 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 		llmTurns++
 		usage = addUsage(usage, response.Usage)
 		if len(response.ToolCalls) == 0 {
-			return Response{Content: strings.TrimSpace(response.Content), Embeds: embeds, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
+			return Response{Content: strings.TrimSpace(response.Content), Embeds: embeds, ToolRuns: runs, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 		}
 		toolCalls += int64(len(response.ToolCalls))
 
@@ -430,7 +454,8 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 			ToolCalls: response.ToolCalls,
 		})
 		for _, call := range response.ToolCalls {
-			content, callEmbeds := executeToolCall(ctx, tools, toolCtx, call)
+			content, callEmbeds, run := executeToolCall(ctx, tools, toolCtx, call)
+			runs = append(runs, run)
 			embeds = append(embeds, callEmbeds...)
 			messages = append(messages, ChatMessage{
 				Role:       "tool",
@@ -451,20 +476,36 @@ func (s *Service) generateWithNativeTools(ctx context.Context, chatCompleter Cha
 	}
 	llmTurns++
 	usage = addUsage(usage, final.Usage)
-	return Response{Content: strings.TrimSpace(final.Content), Embeds: embeds, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
+	return Response{Content: strings.TrimSpace(final.Content), Embeds: embeds, ToolRuns: runs, Usage: usage, LLMTurns: llmTurns, ToolCalls: toolCalls}, nil
 }
 
-func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) (string, []Embed) {
+func executeToolCall(ctx context.Context, tools map[string]Tool, toolCtx ToolContext, call ChatToolCall) (string, []Embed, ToolRun) {
 	tool, ok := tools[call.Name]
 	if !ok {
-		return "Error: unknown tool", nil
+		return "Error: unknown tool", nil, ToolRun{Tool: call.Name, Status: "Unknown tool " + call.Name}
 	}
 	log.Printf("llm tool call: name=%s user_id=%s channel_id=%s", call.Name, toolCtx.UserID, toolCtx.ChannelID)
 	result, err := tool.Execute(ctx, toolCtx, call.Arguments)
 	if err != nil {
-		return "Error: " + err.Error(), nil
+		return "Error: " + err.Error(), nil, ToolRun{Tool: call.Name, Status: "Failed: " + call.Name}
 	}
-	return result.Content, result.Embeds
+	status := strings.TrimSpace(result.Status)
+	if status == "" {
+		status = "Ran " + call.Name
+	}
+	return result.Content, result.Embeds, ToolRun{Tool: call.Name, Status: status, OK: true, Actions: result.Actions}
+}
+
+// RunToolAction handles a button click for an Action a tool returned.
+func (s *Service) RunToolAction(ctx context.Context, toolCtx ToolContext, toolName, actionID string) (string, error) {
+	if s == nil {
+		return "", fmt.Errorf("llm service unavailable")
+	}
+	tool, ok := s.tools[toolName]
+	if !ok || tool.HandleAction == nil {
+		return "", fmt.Errorf("unknown tool action")
+	}
+	return tool.HandleAction(ctx, toolCtx, actionID)
 }
 
 func completeWithMetrics(ctx context.Context, completer Completer, request CompletionRequest) (Response, error) {

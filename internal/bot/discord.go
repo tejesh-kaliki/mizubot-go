@@ -230,7 +230,7 @@ func (b *Bot) onInteractionCreate(s *discordgo.Session, i *discordgo.Interaction
 	default:
 		return
 	}
-	if b.handleLinkRewriteInteraction(s, i) {
+	if b.handleLinkRewriteInteraction(s, i) || b.handleToolActionInteraction(s, i) {
 		return
 	}
 	for _, module := range b.modules {
@@ -272,6 +272,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 
 	response := "Hello"
 	var embeds []*discordgo.MessageEmbed
+	var toolRuns []llm.ToolRun
 	if b.llm != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		stopTyping := b.startTyping(ctx, s, m.ChannelID)
@@ -301,6 +302,7 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		} else if generated.Content != "" || len(generated.Embeds) > 0 {
 			response = generated.Content
 			embeds = discordEmbeds(generated.Embeds)
+			toolRuns = generated.ToolRuns
 			b.logLLMMessage(ctx, m, generated, latency, llmstats.StatusSuccess, "")
 		} else {
 			log.Printf("llm returned empty response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
@@ -312,22 +314,26 @@ func (b *Bot) onMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) 
 		log.Printf("llm service not configured; using fallback response: channel_id=%s user_id=%s message_id=%s", m.ChannelID, m.Author.ID, m.ID)
 	}
 	responses := splitDiscordMessages(response)
+	if len(embeds) > 0 && strings.TrimSpace(response) == "" {
+		responses = nil
+	}
+	responses = appendToolStatus(responses, toolStatusLine(toolRuns))
+	components := toolActionComponents(toolRuns)
 	if len(responses) == 0 && len(embeds) > 0 {
 		// Embed-only reply: no text to split, but there is still a message to send.
 		responses = []string{""}
 	}
 	for idx, part := range responses {
-		var err error
+		send := &discordgo.MessageSend{Content: part}
 		if idx == 0 {
 			// Embeds ride on the first message so they sit right under the reply's opening.
-			_, err = s.ChannelMessageSendComplex(m.ChannelID, &discordgo.MessageSend{
-				Content:   part,
-				Embeds:    embeds,
-				Reference: m.Reference(),
-			})
-		} else {
-			_, err = s.ChannelMessageSend(m.ChannelID, part)
+			send.Embeds = embeds
+			send.Reference = m.Reference()
 		}
+		if idx == len(responses)-1 {
+			send.Components = components
+		}
+		_, err := s.ChannelMessageSendComplex(m.ChannelID, send)
 		if err != nil {
 			log.Printf("discord reply send failed: channel_id=%s user_id=%s message_id=%s part=%d total_parts=%d error=%v", m.ChannelID, m.Author.ID, m.ID, idx+1, len(responses), err)
 			return

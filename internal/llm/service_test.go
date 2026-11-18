@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -492,5 +493,41 @@ func TestServiceGenerateResponseSkipsOtherGuildInstructions(t *testing.T) {
 	}
 	if strings.Contains(completer.requests[0].SystemPrompt, "Do not discuss banned topic.") {
 		t.Fatalf("system prompt included instruction for another guild: %q", completer.requests[0].SystemPrompt)
+	}
+}
+
+func TestServiceRecordsToolRunsAndHandlesActions(t *testing.T) {
+	completer := &fakeCompleter{chat: []ChatResponse{
+		{ToolCalls: []ChatToolCall{{Name: "ok_tool", Arguments: json.RawMessage(`{}`)}, {Name: "bad_tool", Arguments: json.RawMessage(`{}`)}}},
+		{Content: "done"},
+	}}
+	service := NewService(completer,
+		Tool{Name: "ok_tool", Execute: func(context.Context, ToolContext, json.RawMessage) (ToolResult, error) {
+			return ToolResult{Content: "x", Status: "Did it", Actions: []Action{{Label: "Undo", ID: "undo:1"}}}, nil
+		}, HandleAction: func(_ context.Context, _ ToolContext, id string) (string, error) { return "handled " + id, nil }},
+		Tool{Name: "bad_tool", Execute: func(context.Context, ToolContext, json.RawMessage) (ToolResult, error) {
+			return ToolResult{}, errors.New("boom")
+		}},
+	)
+	got, err := service.GenerateResponseWithMetrics(context.Background(), Message{Content: "go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.ToolRuns) != 2 {
+		t.Fatalf("runs = %+v", got.ToolRuns)
+	}
+	byTool := map[string]ToolRun{}
+	for _, r := range got.ToolRuns {
+		byTool[r.Tool] = r
+	}
+	if r := byTool["ok_tool"]; !r.OK || r.Status != "Did it" || len(r.Actions) != 1 {
+		t.Fatalf("ok_tool run = %+v", r)
+	}
+	if r := byTool["bad_tool"]; r.OK {
+		t.Fatalf("bad_tool run = %+v", r)
+	}
+	out, err := service.RunToolAction(context.Background(), ToolContext{}, "ok_tool", "undo:1")
+	if err != nil || out != "handled undo:1" {
+		t.Fatalf("action = %q, %v", out, err)
 	}
 }

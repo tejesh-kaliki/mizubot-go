@@ -44,6 +44,6 @@ func setUserTimezone(service *usersettings.Service) llm.ToolHandler {
 		if err != nil {
 			return llm.ToolResult{}, err
 		}
-		return llm.ToolResult{Content: fmt.Sprintf("Timezone set to %s.", settings.Timezone)}, nil
+		return llm.ToolResult{Content: fmt.Sprintf("Timezone set to %s.", settings.Timezone), Status: "Timezone set to " + settings.Timezone}, nil
 	}
 }

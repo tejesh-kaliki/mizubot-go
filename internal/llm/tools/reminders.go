@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,7 +43,8 @@ func NewReminderTools(service *reminders.Service, settingsService ...*usersettin
 			ClassifierHint: "The user wants a new reminder, alarm, or notification set up, whether one-time or " +
 				"recurring. This includes casual phrasing like \"remind me to...\", \"don't let me forget...\", " +
 				"\"ping me when...\", or \"every day at...\".",
-			Execute: createReminder(service, settings),
+			Execute:      createReminder(service, settings),
+			HandleAction: reminderAction(service),
 		},
 		{
 			Name:        "reminder_delete",
@@ -80,7 +82,10 @@ func listReminders(service *reminders.Service) llm.ToolHandler {
 				humanSchedule(reminder),
 			)
 		}
-		return llm.ToolResult{Content: strings.TrimSpace(b.String())}, nil
+		return llm.ToolResult{
+			Content: strings.TrimSpace(b.String()),
+			Status:  "Listed " + plural(len(list), "active reminder"),
+		}, nil
 	}
 }
 
@@ -131,14 +136,40 @@ func createReminder(service *reminders.Service, settingsService *usersettings.Se
 		if err != nil {
 			return llm.ToolResult{}, err
 		}
-		return llm.ToolResult{Content: fmt.Sprintf("Created reminder ID %d.\nMessage: %s\nNext run: %s\nChannel: %s\nTimezone: %s\nRepeat: %s",
-			created.ID,
-			created.Message,
-			discordTimestamp(created.NextRun),
-			created.ChannelID,
-			created.Timezone,
-			humanSchedule(*created),
-		)}, nil
+		return llm.ToolResult{
+			Status:  fmt.Sprintf("Created reminder #%d", created.ID),
+			Actions: []llm.Action{{Label: "Delete", ID: fmt.Sprintf("delete:%d", created.ID), Danger: true}},
+			Content: fmt.Sprintf("Created reminder ID %d.\nMessage: %s\nNext run: %s\nChannel: %s\nTimezone: %s\nRepeat: %s",
+				created.ID,
+				created.Message,
+				discordTimestamp(created.NextRun),
+				created.ChannelID,
+				created.Timezone,
+				humanSchedule(*created),
+			)}, nil
+	}
+}
+
+// reminderAction handles the buttons under a reminder_create reply. Deletion
+// is scoped to the clicking user, so someone else cannot remove it.
+func reminderAction(service *reminders.Service) func(context.Context, llm.ToolContext, string) (string, error) {
+	return func(ctx context.Context, toolCtx llm.ToolContext, actionID string) (string, error) {
+		idText, ok := strings.CutPrefix(actionID, "delete:")
+		if !ok {
+			return "", fmt.Errorf("unknown reminder action %q", actionID)
+		}
+		id, err := strconv.ParseInt(idText, 10, 64)
+		if err != nil || id <= 0 {
+			return "", fmt.Errorf("invalid reminder id")
+		}
+		_, found, err := service.DeleteReminderWithDetails(ctx, id, toolCtx.UserID)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			return fmt.Sprintf("Reminder #%d was already gone or isn't yours", id), nil
+		}
+		return fmt.Sprintf("Deleted reminder #%d", id), nil
 	}
 }
 
@@ -189,6 +220,7 @@ func deleteReminder(service *reminders.Service) llm.ToolHandler {
 		}
 
 		var b strings.Builder
+		deletedCount := 0
 		for _, id := range args.IDs {
 			if id <= 0 {
 				fmt.Fprintf(&b, "Invalid reminder ID %d.\n\n", id)
@@ -202,6 +234,7 @@ func deleteReminder(service *reminders.Service) llm.ToolHandler {
 				fmt.Fprintf(&b, "Reminder ID %d was not found for this user.\n\n", id)
 				continue
 			}
+			deletedCount++
 			fmt.Fprintf(&b, "Deleted reminder ID %d.\nMessage: %s\nNext run: %s\nChannel: %s\nTimezone: %s\nRepeat: %s\n\n",
 				deleted.ID,
 				deleted.Message,
@@ -211,6 +244,9 @@ func deleteReminder(service *reminders.Service) llm.ToolHandler {
 				humanSchedule(deleted),
 			)
 		}
-		return llm.ToolResult{Content: strings.TrimSpace(b.String())}, nil
+		return llm.ToolResult{
+			Content: strings.TrimSpace(b.String()),
+			Status:  fmt.Sprintf("Deleted %d of %s requested", deletedCount, plural(len(args.IDs), "reminder")),
+		}, nil
 	}
 }
