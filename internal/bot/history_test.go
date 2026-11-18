@@ -152,7 +152,7 @@ func TestShouldTriggerLLM(t *testing.T) {
 
 	rewrite := &discordgo.Message{
 		ID:      "m1",
-		Content: formatLinkRewrite("222", "https://fixupx.com/thdxr/status/2116735229792522518/en"),
+		Content: formatLinkRewrite("222", "https://fixvx.com/thdxr/status/2116735229792522518/en"),
 		Author:  &discordgo.User{ID: "bot1"},
 	}
 	replyToRewrite := &discordgo.Message{

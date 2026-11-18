@@ -16,12 +16,12 @@ func TestRewriteTweetLinks(t *testing.T) {
 	}{
 		{
 			in:      "https://x.com/thdxr/status/2116735229792522518?a=7xJcZuXh2-RPvE_2rXY&s=19",
-			want:    "https://fixupx.com/thdxr/status/2116735229792522518/en",
+			want:    "https://fixvx.com/thdxr/status/2116735229792522518/en",
 			changed: true,
 		},
 		{
 			in:      "look at this https://twitter.com/a_b/status/1/photo/1?s=20 lol",
-			want:    "look at this https://fixupx.com/a_b/status/1/en lol",
+			want:    "look at this https://fixvx.com/a_b/status/1/en lol",
 			changed: true,
 		},
 		{in: "<https://x.com/a/status/1?s=1>", want: "<https://x.com/a/status/1?s=1>"},
@@ -183,7 +183,7 @@ func TestRewriteInstagramLinks(t *testing.T) {
 
 func TestRewriteEmbedLinksMixed(t *testing.T) {
 	in := "https://x.com/thdxr/status/2116735229792522518?s=19 and https://www.instagram.com/reel/CxAbCdEfGhI/?igsh=abc"
-	want := "https://fixupx.com/thdxr/status/2116735229792522518/en and https://oginstagram.com/reel/CxAbCdEfGhI"
+	want := "https://fixvx.com/thdxr/status/2116735229792522518/en and https://oginstagram.com/reel/CxAbCdEfGhI"
 	got, changed := rewriteEmbedLinks(in)
 	if !changed || got != want {
 		t.Fatalf("rewriteEmbedLinks(%q) = %q, %v; want %q, true", in, got, changed, want)
@@ -209,7 +209,7 @@ func TestComposeLinkRewriteEditKeepsAttribution(t *testing.T) {
 	if !strings.HasPrefix(content, "Shared by <@42>\n") {
 		t.Fatalf("content = %q, want the owner mention kept at the top", content)
 	}
-	if !strings.Contains(content, "https://fixupx.com/a/status/1/en") {
+	if !strings.Contains(content, "https://fixvx.com/a/status/1/en") {
 		t.Fatalf("content = %q, want the tweet link rewritten", content)
 	}
 	if !strings.Contains(content, "hey <@&99> <@7> @everyone ") {
@@ -244,7 +244,7 @@ func TestLinkRewriteControls(t *testing.T) {
 		t.Fatal("non-snowflake delete id should be rejected")
 	}
 
-	msg := &discordgo.Message{Content: formatLinkRewrite("42", "https://fixupx.com/a/status/1/en")}
+	msg := &discordgo.Message{Content: formatLinkRewrite("42", "https://fixvx.com/a/status/1/en")}
 	if !linkRewriteOwnedBy(msg, "42") || linkRewriteOwnedBy(msg, "7") {
 		t.Fatal("ownership check failed")
 	}
@@ -271,7 +271,7 @@ func TestLinkRewriteInteractionClaimsOnlyItsButtons(t *testing.T) {
 		Data:   discordgo.MessageComponentInteractionData{CustomID: linkRewriteEditID},
 		Member: &discordgo.Member{User: &discordgo.User{ID: "7"}},
 		Message: &discordgo.Message{
-			Content: formatLinkRewrite("42", "https://fixupx.com/a/status/1/en"),
+			Content: formatLinkRewrite("42", "https://fixvx.com/a/status/1/en"),
 		},
 	}}
 	if !b.handleLinkRewriteInteraction(nil, edit) {

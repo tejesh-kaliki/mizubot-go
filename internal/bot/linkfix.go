@@ -35,7 +35,7 @@ const (
 
 // linkRewriteMessageRE matches a repost this bot made. Replies to those posts
 // are not treated as a request for the bot unless they also @mention it.
-var linkRewriteMessageRE = regexp.MustCompile(`(?s)^Shared by <@!?\d+>\n.*https://(?:fixupx\.com/\w{1,15}/status/\d+/en|oginstagram\.com/)`)
+var linkRewriteMessageRE = regexp.MustCompile(`(?s)^Shared by <@!?\d+>\n.*https://(?:fixvx\.com/\w{1,15}/status/\d+/en|oginstagram\.com/)`)
 
 // linkRewriteAuthorRE is the attribution line. The edit box never includes it,
 // so saving an edit cannot drop the mention of the person who shared the link.
@@ -48,7 +48,7 @@ var (
 	instagramStoryIDRE   = regexp.MustCompile(`^[0-9]{5,}$`)
 )
 
-// rewriteTweetLinks swaps every tweet link for its tracking-free fixupx.com
+// rewriteTweetLinks swaps every tweet link for its tracking-free fixvx.com
 // equivalent with a /en suffix. Links wrapped in <...> are left alone since the
 // author deliberately suppressed their embed.
 func rewriteTweetLinks(content string) (string, bool) {
@@ -66,7 +66,7 @@ func rewriteTweetLinks(content string) (string, bool) {
 		}
 		user, id := content[m[2]:m[3]], content[m[4]:m[5]]
 		sb.WriteString(content[last:start])
-		sb.WriteString(fmt.Sprintf("https://fixupx.com/%s/status/%s/en", user, id))
+		sb.WriteString(fmt.Sprintf("https://fixvx.com/%s/status/%s/en", user, id))
 		last = end
 		changed = true
 	}
